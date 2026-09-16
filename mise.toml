@@ -1,0 +1,6 @@
+[tools]
+ruby = "4.0.7"
+
+[env]
+BUNDLE_PATH = "vendor/bundle"
+BUNDLE_BUILD__GOSU = "--with-ldflags=-Wl,-framework,AppKit,-L/opt/homebrew/lib,-lSDL2,-lSDL2main"

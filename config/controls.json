@@ -1,0 +1,13 @@
+{
+  "up_left": ["q", "w"],
+  "up_right": ["e", "d"],
+  "down_left": ["z", "a"],
+  "down_right": ["c", "s"],
+  "select_left": ["left", "a"],
+  "select_right": ["right", "d"],
+  "select_up": ["up", "w"],
+  "select_down": ["down", "s"],
+  "confirm": ["return"],
+  "pause": ["escape"],
+  "mute": ["m"]
+}
