@@ -2,7 +2,38 @@
 
 require "gosu"
 require "json"
+require "optparse"
 require_relative "lib/game_state"
+
+module RaiBertCLI
+  module_function
+
+  def parse(argv)
+    options = { start_level: 1, starting_lives: nil, difficulty: nil, demo: false }
+    OptionParser.new do |parser|
+      parser.banner = "Usage: ruby game.rb [options]"
+      parser.on("--level N", Integer, "Start at level 1-#{GameState::LEVEL_COUNT}") do |value|
+        raise OptionParser::InvalidArgument, "level must be between 1 and #{GameState::LEVEL_COUNT}" unless value.between?(1, GameState::LEVEL_COUNT)
+
+        options[:start_level] = value
+      end
+      parser.on("--lives N", Integer, "Start with 1-99 lives") do |value|
+        raise OptionParser::InvalidArgument, "lives must be between 1 and 99" unless value.between?(1, 99)
+
+        options[:starting_lives] = value
+      end
+      parser.on("--difficulty MODE", "easy, normal, or hard") do |value|
+        difficulty = value.to_sym
+        raise OptionParser::InvalidArgument, "difficulty must be easy, normal, or hard" unless GameState::DIFFICULTIES.key?(difficulty)
+
+        options[:difficulty] = difficulty
+      end
+      parser.on("--demo", "Autoplay the game") { options[:demo] = true }
+      parser.on("-h", "--help", "Show this help") { options[:help] = parser.to_s }
+    end.parse!(argv)
+    options
+  end
+end
 
 class RaiBertWindow < Gosu::Window
   WIDTH = 1_000
@@ -75,7 +106,7 @@ class RaiBertWindow < Gosu::Window
   ].freeze
   KEY_ALIASES = { "enter" => "return", "esc" => "escape" }.freeze
 
-  def initialize
+  def initialize(start_level: 1, starting_lives: nil, difficulty: nil)
     super(WIDTH, HEIGHT, fullscreen: false)
     self.caption = "Rai*bert // ship it"
     @font = Gosu::Font.new(20, name: "Menlo")
@@ -98,8 +129,10 @@ class RaiBertWindow < Gosu::Window
     end
     load_controls
     @screen = :select
+    @start_level = start_level
+    @starting_lives = starting_lives
     @selection = 0
-    @difficulty_selection = DIFFICULTY_KEYS.index(:normal)
+    @difficulty_selection = DIFFICULTY_KEYS.index(difficulty || :normal)
     @muted = false
     @paused = false
     @pause_started_at = nil
@@ -212,7 +245,12 @@ class RaiBertWindow < Gosu::Window
   def start_game
     @character = CHARACTERS[@selection][:id]
     reset_game_clock
-    @game = GameState.new(now: game_time, difficulty: DIFFICULTY_KEYS.fetch(@difficulty_selection))
+    @game = GameState.new(
+      now: game_time,
+      difficulty: DIFFICULTY_KEYS.fetch(@difficulty_selection),
+      start_level: @start_level,
+      starting_lives: @starting_lives
+    )
     @screen = :game
     @hop = nil
     @respawn = nil
@@ -398,7 +436,12 @@ class RaiBertWindow < Gosu::Window
     @small_font.draw_text(format("PASS %02d/28", fixed), 30, 54, 5, 1, 1, COLORS[:white])
     center_text(@font, format("SCORE %07d", @game.score), WIDTH / 2, 22, 5, COLORS[:white])
     @small_font.draw_text("LIVES", 772, 29, 5, 1, 1, COLORS[:muted])
-    @game.lives.times { |index| sprite(@character, 0, 0).draw(820 + index * 31, 14, 5, 0.20, 0.20) }
+    if @game.lives <= 5
+      @game.lives.times { |index| sprite(@character, 0, 0).draw(820 + index * 31, 14, 5, 0.20, 0.20) }
+    else
+      sprite(@character, 0, 0).draw(820, 14, 5, 0.20, 0.20)
+      @font.draw_text("x#{@game.lives}", 854, 24, 5, 1, 1, COLORS[:white])
+    end
     @small_font.draw_text(@game.difficulty.to_s.upcase, 790, 54, 5, 1, 1, accent)
     @small_font.draw_text(@muted ? "MUTED" : "SOUND ON", 878, 54, 5, 1, 1, COLORS[:muted])
     effects = []
@@ -641,4 +684,24 @@ class RaiBertWindow < Gosu::Window
   end
 end
 
-RaiBertWindow.new.show if $PROGRAM_NAME == __FILE__
+if $PROGRAM_NAME == __FILE__
+  begin
+    options = RaiBertCLI.parse(ARGV)
+  rescue OptionParser::ParseError => error
+    warn "Rai*bert: #{error.message}"
+    warn "Run with --help for usage."
+    exit 2
+  end
+  if (help = options.delete(:help))
+    puts help
+    exit
+  end
+  demo = options.delete(:demo)
+  if demo
+    require_relative "lib/demo_window"
+    options[:difficulty] ||= :normal
+    DemoWindow.new(**options).show
+  else
+    RaiBertWindow.new(**options).show
+  end
+end

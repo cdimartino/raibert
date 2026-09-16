@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../game"
+require_relative "../lib/demo_window"
 
 def assert(condition, message)
   raise "Smoke check failed: #{message}" unless condition
@@ -19,6 +20,7 @@ def place_pickup(game, kind, position = game.player)
 end
 
 game = GameState.new(random: Random.new(1), now: 0)
+assert(DemoWindow < RaiBertWindow, "demo mode integrates with the game window")
 assert(RaiBertWindow::THEMES.length == 20 && RaiBertWindow::LEVEL_NAMES.length == 20, "every level has a visual and name")
 RaiBertWindow::THEMES.each do |theme|
   assert(File.exist?(File.join(__dir__, "../assets/music/#{theme[:music]}.wav")), "#{theme[:music]} soundtrack exists")
@@ -26,6 +28,29 @@ end
 assert(game.player == [0, 0], "player starts at the summit")
 assert(game.difficulty == :normal && game.lives == 3, "normal is the default difficulty")
 assert(game.target_for(:down_right) == [1, 1], "diagonal movement maps to the pyramid")
+
+options = RaiBertCLI.parse(%w[--level 12 --lives 99 --difficulty hard --demo])
+assert(options == { start_level: 12, starting_lives: 99, difficulty: :hard, demo: true }, "CLI accepts level, lives, difficulty, and demo overrides")
+assert(RaiBertCLI.parse(%w[--lives 1])[:starting_lives] == 1, "CLI accepts the lower lives boundary")
+assert(RaiBertCLI.parse(%w[--help])[:help].include?("--demo"), "CLI help describes demo mode")
+[%w[--level 0], %w[--level 21], %w[--lives 0], %w[--lives 100], %w[--difficulty impossible]].each do |arguments|
+  begin
+    RaiBertCLI.parse(arguments)
+    raise "Smoke check failed: invalid CLI arguments were accepted: #{arguments.join(' ')}"
+  rescue OptionParser::ParseError
+    # expected
+  end
+end
+
+configured = GameState.new(random: Random.new(1), now: 0, difficulty: :hard, start_level: 12, starting_lives: 9)
+assert(configured.stage == 12 && configured.level == 12 && configured.lives == 9, "configured run starts at its requested level and lives")
+2.times do |index|
+  place_pickup(configured, :life)
+  configured.send(:collect_pickup, 1_000 + index)
+end
+assert(configured.lives == 10, "extra life caps one above the configured starting lives")
+configured.reset(3_000)
+assert(configured.stage == 12 && configured.level == 12 && configured.lives == 9, "reset restores configured level and lives")
 
 window = RaiBertWindow.allocate
 landing_game = GameState.new(random: Random.new(1), now: 0)

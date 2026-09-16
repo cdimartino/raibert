@@ -25,19 +25,25 @@ class GameState
               :level, :target, :status, :rescues, :freeze_until, :shield_until,
               :difficulty
 
-  def initialize(random: Random.new, now: 0, difficulty: :normal)
+  def initialize(random: Random.new, now: 0, difficulty: :normal, start_level: 1, starting_lives: nil)
     @random = random
     @difficulty = difficulty
     @difficulty_settings = DIFFICULTIES.fetch(difficulty) do
       raise ArgumentError, "Unknown difficulty: #{difficulty}"
     end
+    raise ArgumentError, "Start level must be between 1 and #{LEVEL_COUNT}" unless start_level.is_a?(Integer) && start_level.between?(1, LEVEL_COUNT)
+
+    @start_level = start_level
+    @starting_lives = starting_lives || @difficulty_settings[:lives]
+    raise ArgumentError, "Starting lives must be between 1 and 99" unless @starting_lives.is_a?(Integer) && @starting_lives.between?(1, 99)
+
     reset(now)
   end
 
   def reset(now = 0)
-    @lives = @difficulty_settings[:lives]
+    @lives = @starting_lives
     @score = 0
-    @stage = 1
+    @stage = @start_level
     setup_stage(now)
   end
 
@@ -175,7 +181,7 @@ class GameState
     when :gc
       @enemies.clear
     when :life
-      @lives = [@lives + 1, @difficulty_settings[:lives] + 1].min
+      @lives = [@lives + 1, @starting_lives + 1].min
     when :shield
       @shield_until = now + 5_000
       @invulnerable_until = [@invulnerable_until, @shield_until].max
@@ -191,7 +197,7 @@ class GameState
     return if @pickup || now - @last_pickup_at < 8_000
     return if @player == [0, 0] || @enemies.any? { |enemy| [enemy[:row], enemy[:column]] == [0, 0] }
 
-    kinds = PICKUP_KINDS.reject { |kind| kind == :life && @lives >= @difficulty_settings[:lives] + 1 }
+    kinds = PICKUP_KINDS.reject { |kind| kind == :life && @lives >= @starting_lives + 1 }
     @pickup = {
       kind: kinds.sample(random: @random), row: 0, column: 0,
       from: [-1, -0.5], moved_at: now, next_at: now + pickup_interval
@@ -293,7 +299,7 @@ class GameState
     return @status = :victory if @level >= LEVEL_COUNT
 
     @stage += 1
-    @lives += 1 if @lives < @difficulty_settings[:lives]
+    @lives += 1 if @lives < @starting_lives
     setup_stage(now)
   end
 end
