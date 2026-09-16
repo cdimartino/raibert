@@ -147,4 +147,4 @@ test/smoke_test.rb      Runnable gameplay rules check
 
 Rai character artwork is derived from the supplied `rai-pets-v2.zip`. Stage, enemy, rescue, and powerup art was generated for this game; generation prompts are preserved in `assets/art/PROMPTS.md`. [Gosu](https://www.libgosu.org/) is MIT-licensed.
 
-No project-wide open-source license is currently granted. Add a `LICENSE` file before offering reuse rights beyond viewing and running this team demo.
+Rai*bert is released under the [MIT License](LICENSE).
