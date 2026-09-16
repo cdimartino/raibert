@@ -1,0 +1,9 @@
+{
+  "name": "raibert-web-runtime",
+  "private": true,
+  "dependencies": {
+    "@ruby/4.0-wasm-wasi": "2.10.1",
+    "@ruby/wasm-wasi": "2.10.1",
+    "esbuild": "0.25.10"
+  }
+}

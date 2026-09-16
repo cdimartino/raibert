@@ -8,7 +8,7 @@ class GameState
   DIFFICULTIES = {
     easy: { label: "EASY", note: "4 lives // relaxed threats", lives: 4, spawn: 1.25, speed: 1.15, enemies: -1, powerup: 1.15 },
     normal: { label: "NORMAL", note: "3 lives // standard pipeline", lives: 3, spawn: 1.0, speed: 1.0, enemies: 0, powerup: 1.0 },
-    hard: { label: "HARD", note: "3 lives // dense threat field", lives: 3, spawn: 1.02, speed: 1.02, enemies: 1, powerup: 0.85 }
+    hard: { label: "HARD", note: "3 lives // dense threat field", lives: 3, spawn: 0.9, speed: 0.9, enemies: 1, powerup: 0.85 }
   }.freeze
   DIRECTIONS = {
     up_left: [-1, -1],
@@ -75,7 +75,7 @@ class GameState
     collected = collect_pickup(now)
     hit = collide(now)
     return :hit if hit
-    return :stage_clear if @status == :stage_clear
+    return @status if %i[stage_clear victory].include?(@status)
 
     collected || :hop
   end

@@ -10,9 +10,10 @@ end
 def clear_stage(game, now)
   game.tiles.each_key { |tile| game.tiles[tile] = game.target }
   game.tiles[[1, 0]] = game.target - 1
-  game.move(:down_left, now)
+  event = game.move(:down_left, now)
   expected = game.level == GameState::LEVEL_COUNT ? :victory : :stage_clear
   assert(game.status == expected, "last fixed tile completes level #{game.level}")
+  assert(event == expected, "last fixed tile reports #{expected} for level #{game.level}")
 end
 
 def place_pickup(game, kind, position = game.player)
@@ -63,8 +64,9 @@ window.instance_variable_set(:@music_level, landing_game.level)
 window.instance_variable_set(:@test_time, 3_000)
 window.define_singleton_method(:game_time) { @test_time }
 window.define_singleton_method(:play) { |_event| }
+window.instance_variable_set(:@controls, RaiBertWindow::CONTROL_ACTIONS.to_h { |action| [action, [action]] })
 place_pickup(landing_game, :life, [1, 1])
-window.send(:begin_hop, :down_right)
+window.press(:down_right)
 assert(landing_game.player == [0, 0] && landing_game.tiles[[1, 1]].zero?, "hop does not land at takeoff")
 window.instance_variable_set(:@test_time, 3_000 + RaiBertWindow::JUMP_TIME - 1)
 window.update
@@ -74,6 +76,20 @@ window.update
 assert(landing_game.player == [1, 1] && landing_game.tiles[[1, 1]] == 1, "touchdown changes the tile")
 assert(landing_game.lives == 4 && landing_game.pickup.nil?, "touchdown collects an extra life")
 assert(landing_game.enemies.length == 1, "enemy scheduler advances at touchdown")
+begin
+  window.press(:unsupported)
+  raise "Smoke check failed: invalid semantic control was accepted"
+rescue ArgumentError
+  # expected
+end
+completion_sound = Object.new
+completion_plays = []
+completion_sound.define_singleton_method(:play) { |volume, speed| completion_plays << [volume, speed] }
+completion_window = RaiBertWindow.allocate
+completion_window.instance_variable_set(:@muted, false)
+completion_window.instance_variable_set(:@sound, completion_sound)
+completion_window.send(:play, :victory)
+assert(completion_plays == [[0.28, 2.0]], "victory plays the completion effect")
 
 easy = GameState.new(random: Random.new(1), now: 0, difficulty: :easy)
 hard = GameState.new(random: Random.new(1), now: 0, difficulty: :hard)
@@ -85,6 +101,10 @@ assert(easy.lives == 4 && hard.lives == 3, "difficulty changes starting lives")
 end
 normal_interval = game.send(:pickup_interval)
 assert(easy.send(:pickup_interval) > normal_interval && normal_interval > hard.send(:pickup_interval), "harder modes shorten pickup availability")
+assert(hard.send(:spawn_interval) < game.send(:spawn_interval), "hard mode spawns enemies faster")
+%i[bug exception regression].each do |kind|
+  assert(hard.send(:enemy_interval, kind) < game.send(:enemy_interval, kind), "hard mode moves #{kind} enemies faster")
+end
 late_game = GameState.new(random: Random.new(1), now: 0)
 late_game.instance_variable_set(:@level, GameState::LEVEL_COUNT)
 assert(late_game.send(:pickup_interval) < normal_interval, "later levels shorten pickup availability")

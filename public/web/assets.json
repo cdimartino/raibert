@@ -1,0 +1,17 @@
+{
+  "images": [
+    "/assets/rai/spritesheet.png",
+    "/assets/rai_voxel/spritesheet.png",
+    "/assets/art/build.png",
+    "/assets/art/test.png",
+    "/assets/art/deploy.png",
+    "/assets/art/observe.png",
+    "/assets/art/scale.png",
+    "/assets/art/objects.png",
+    "/assets/art/powerups/life.png",
+    "/assets/art/powerups/shield.png",
+    "/assets/art/powerups/patch.png"
+  ],
+  "effect": "/assets/blip.wav",
+  "initialSong": "/assets/music/build.wav"
+}

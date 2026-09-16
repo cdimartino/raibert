@@ -1,0 +1,7 @@
+--- a/lib/ruby_wasm/build/product/crossruby.rb
++++ b/lib/ruby_wasm/build/product/crossruby.rb
+@@ -33,3 +33,4 @@ module RubyWasm
+       make_args << "LD=#{@toolchain.ld}"
+       make_args << "AR=#{@toolchain.ar}"
+       make_args << "RANLIB=#{@toolchain.ranlib}"
++      make_args << "INCFLAGS=-I#{crossruby.build_dir}/.ext/include/wasm32-wasi -I#{crossruby.build_dir}/.ext/include -I#{crossruby.source.src_dir}"

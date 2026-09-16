@@ -187,6 +187,21 @@ class RaiBertWindow < Gosu::Window
     @screen == :select ? select_input(key) : game_input(key)
   end
 
+  def press(action)
+    raise ArgumentError, "Unknown control action: #{action}" unless action.respond_to?(:to_sym)
+
+    action = action.to_sym
+    action = {
+      up_left: :select_up,
+      up_right: :select_right,
+      down_left: :select_left,
+      down_right: :select_down
+    }.fetch(action, action) if @screen == :select
+    raise ArgumentError, "Unknown control action: #{action}" unless CONTROL_ACTIONS.include?(action)
+
+    button_down(@controls.fetch(action).first)
+  end
+
   def draw
     draw_background
     @screen == :select ? draw_select : draw_game
@@ -300,7 +315,7 @@ class RaiBertWindow < Gosu::Window
     speed = {
       select: 1.1, start: 1.5, hop: 1.0, debugger: 1.8, gc: 0.65,
       life: 1.65, shield: 1.4, patch: 1.2, rescue: 1.35,
-      stage_clear: 2.0, fall: 0.55, hit: 0.45
+      stage_clear: 2.0, victory: 2.0, fall: 0.55, hit: 0.45
     }.fetch(event, 1.0)
     @sound.play(0.28, speed)
   end

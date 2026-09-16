@@ -247,7 +247,4 @@ class DemoWindow < RaiBertWindow
     instance_variable_defined?(:@respawn) && !@respawn.nil?
   end
 
-  def press(action)
-    button_down(@controls.fetch(action).first)
-  end
 end

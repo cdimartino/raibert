@@ -49,6 +49,8 @@ The included setup targets macOS and uses:
 
 Gosu and the remaining Ruby dependencies are declared in `Gemfile` and locked in `Gemfile.lock`.
 
+The browser build is a stateless Rack application. Its compiled Ruby 4.0.7 WebAssembly runtime is committed, so hosting it does not require Node.js or Docker. Installing Puma and nio4r may still require the platform's standard Ruby C build tools.
+
 ## Install and run on macOS
 
 ```sh
@@ -66,7 +68,49 @@ After the first setup, launch with:
 mise exec -- bundle exec ruby game.rb
 ```
 
+## Run in a browser
+
+Install the locked server gems and start Puma:
+
+```sh
+mise exec -- bundle config set --local without desktop
+mise exec -- bundle install
+mise exec -- bundle exec puma
+```
+
+Skip the `bundle config` line on a machine that also runs the native desktop game.
+
+Open `http://localhost:9292`. Set `PORT` when the hosting platform assigns one:
+
+```sh
+PORT=8080 mise exec -- bundle exec puma
+```
+
+On a host that already provides Ruby 4.0.7 and Bundler, omit the `mise exec --` prefix. Deploy the repository root, including `public/web` and `assets`, run `bundle exec puma`, and terminate HTTPS at the platform or reverse proxy. The shell uses absolute `/web` and `/assets` URLs, so mount it at the origin root rather than under a path prefix.
+
+The browser runs the same Ruby game and rules locally through WebAssembly. Rack only serves the application and existing assets; it stores no sessions or game state. Reloading starts a new run.
+
+The bounded native Gosu/Emscripten gate was rejected because CRuby 4.0.7's Emscripten coroutine backend requires Asyncify. The shipped build therefore uses the supported WASI runtime with the small Canvas/Web Audio Gosu compatibility layer in `web/gosu.rb`.
+
+Keyboard controls match the desktop game. The page also provides touch buttons for the four contextual directions, start/confirm, pause/back, and mute. Browser audio starts after the first keyboard or touch action, as required by browser autoplay policies.
+
+The first visit downloads the Ruby/WebAssembly runtime, artwork, and initial audio, so it is substantially larger than a typical static page; content-hashed runtime files are cached after that load. Browser mode requires WebAssembly, ES modules, Canvas 2D, and Web Audio. Desktop CLI overrides and `--demo` are not available in the browser.
+
+### Rebuild the web runtime
+
+The committed runtime is ready to host. Rebuild after changing `game.rb`, `lib/`, `config/controls.json`, the browser shim/boot code, or the ruby.wasm loader:
+
+```sh
+script/build_web
+```
+
+The build requires a running Docker daemon. It compiles the pinned CRuby 4.0.7 WASI runtime, packages only the Ruby source and configuration into WebAssembly, bundles the pinned ruby.wasm browser loader, and writes content-hashed artifacts plus license notices under `public/web`. Images and audio remain under `/assets` and are not duplicated in the Wasm binary.
+
+Docker must support `linux/amd64` containers. The script reuses the ignored `build/web-runtime` cache and invalidates its compiled Ruby base when build inputs change. Changes limited to `public/index.html`, `public/web/app.css`, or `public/web/app.js` are served directly and do not require a Wasm rebuild.
+
 ## Command-line options
+
+These options apply to the native desktop launch only; the browser always opens the character and difficulty selection screen at Level 1.
 
 Launching without flags is unchanged: choose a character and difficulty in the game, then begin at Level 1 with that difficulty's normal life count.
 
@@ -117,15 +161,21 @@ Bindings live in `config/controls.json`. Each action accepts one or more Gosu ke
 }
 ```
 
+The desktop app reads this file at launch. The browser copy is embedded in the Wasm artifact, so rerun `script/build_web` after changing bindings; semantic touch buttons continue to follow the configured actions.
+
 Difficulty and character are normally selected in the game; `--difficulty` can preset the difficulty for a test or demo run. No save file or checkpoint configuration is used.
 
 ## Test
 
 After installing dependencies, run the rules smoke test:
 
+The full smoke test requires the `desktop` bundle group. A browser-only install made with `without desktop` can run `test/web_shim_test.rb` and `test/rack_test.rb`; unset that Bundler setting and install Gosu before running `test/smoke_test.rb`.
+
 ```sh
 mise exec -- bundle check
 mise exec -- bundle exec ruby test/smoke_test.rb
+mise exec -- ruby test/web_shim_test.rb
+mise exec -- bundle exec ruby test/rack_test.rb
 ```
 
 The smoke test covers campaign progression, CLI validation, difficulty scaling, enemies, touchdown timing, rescues, powerup effects and expiry, life limits, Game Over reset, and Level 20 victory.
@@ -137,6 +187,10 @@ game.rb                 Gosu window, input, rendering, animation, and audio
 lib/game_state.rb       Deterministic game rules and balance
 lib/demo_window.rb      Real-input autoplay driver used by --demo
 config/controls.json    Customizable key bindings
+config.ru               Rack entry point for the browser build
+web/                    Browser Gosu compatibility layer and Wasm boot code
+public/                  Browser shell and compiled WebAssembly runtime
+script/build_web         Reproducible Docker-based web runtime build
 assets/art/             Stage, enemy, rescue, and powerup artwork
 assets/music/           One soundtrack per level
 assets/rai*/            Character sprite sheets
@@ -146,5 +200,7 @@ test/smoke_test.rb      Runnable gameplay rules check
 ## Credits and licensing
 
 Rai character artwork is derived from the supplied `rai-pets-v2.zip`. Stage, enemy, rescue, and powerup art was generated for this game; generation prompts are preserved in `assets/art/PROMPTS.md`. [Gosu](https://www.libgosu.org/) is MIT-licensed.
+
+The browser runtime includes CRuby and ruby.wasm. Their license and notice files are distributed with the generated files under `public/web/licenses`.
 
 Rai*bert is released under the [MIT License](LICENSE).
