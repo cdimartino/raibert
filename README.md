@@ -92,7 +92,7 @@ The browser runs the same Ruby game and rules locally through WebAssembly. Rack 
 
 The bounded native Gosu/Emscripten gate was rejected because CRuby 4.0.7's Emscripten coroutine backend requires Asyncify. The shipped build therefore uses the supported WASI runtime with the small Canvas/Web Audio Gosu compatibility layer in `web/gosu.rb`.
 
-Keyboard controls match the desktop game. The page also provides touch buttons for the four contextual directions, start/confirm, pause/back, and mute. Browser audio starts after the first keyboard or touch action, as required by browser autoplay policies.
+Keyboard controls match the desktop game. The page also provides touch buttons for the four contextual directions, start/confirm, options, pause/back, and mute. Browser audio starts after the first keyboard or touch action, as required by browser autoplay policies.
 
 The first visit downloads the Ruby/WebAssembly runtime, artwork, and initial audio, so it is substantially larger than a typical static page; content-hashed runtime files are cached after that load. Browser mode requires WebAssembly, ES modules, Canvas 2D, and Web Audio. Desktop CLI overrides and `--demo` are not available in the browser.
 
@@ -150,7 +150,7 @@ The overrides are launch settings, not checkpoints: after Game Over, the game re
 
 ## Configuration
 
-Bindings live in `config/controls.json`. Each action accepts one or more Gosu key names; the game validates every action and key at startup.
+Bindings live in `config/controls.json`. Movement defaults to Q/E/A/D with one key per direction. Press O before starting or while paused to replace a movement key for the current session. The game rejects unsupported, reserved, and duplicate bindings.
 
 ```json
 {

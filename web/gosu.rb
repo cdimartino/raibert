@@ -106,8 +106,7 @@ module Gosu
       end
       key = proc { |name| safely { button_down(name.to_s) } unless @closed }
       action = proc { |name| safely { press(name.to_s.to_sym) } unless @closed }
-      keys = instance_variable_defined?(:@controls) ? @controls.values.flatten.uniq : KEY_NAMES
-      Gosu.bridge.call(:start, frame, key, action, JSON.generate(keys))
+      Gosu.bridge.call(:start, frame, key, action, JSON.generate(KEY_NAMES))
       self
     end
 

@@ -282,8 +282,8 @@ document.querySelectorAll("button[data-key]").forEach(button => {
   button.addEventListener("click", event => {
     event.preventDefault();
     const actions = {
-      w: "up_left", d: "up_right", a: "down_left", s: "down_right",
-      return: "confirm", escape: "pause", m: "mute"
+      q: "up_left", e: "up_right", a: "down_left", d: "down_right",
+      return: "confirm", escape: "pause", o: "options", m: "mute"
     };
     dispatchAction(actions[button.dataset.key]);
   });

@@ -102,8 +102,12 @@ class RaiBertWindow < Gosu::Window
   ].freeze
 
   CONTROL_ACTIONS = %i[
-    up_left up_right down_left down_right select_left select_right select_up select_down confirm pause mute
+    up_left up_right down_left down_right select_left select_right select_up select_down confirm options pause mute
   ].freeze
+  MOVE_ACTIONS = %i[up_left up_right down_left down_right].freeze
+  MOVE_LABELS = {
+    up_left: "UP-LEFT", up_right: "UP-RIGHT", down_left: "DOWN-LEFT", down_right: "DOWN-RIGHT"
+  }.freeze
   KEY_ALIASES = { "enter" => "return", "esc" => "escape" }.freeze
 
   def initialize(start_level: 1, starting_lives: nil, difficulty: nil)
@@ -143,6 +147,9 @@ class RaiBertWindow < Gosu::Window
     @last_direction = :down_right
     @flash_until = 0
     @music_level = nil
+    @options_selection = 0
+    @rebinding_action = nil
+    @options_message = nil
   end
 
   def needs_cursor?
@@ -178,6 +185,11 @@ class RaiBertWindow < Gosu::Window
   end
 
   def button_down(key)
+    if @screen == :options
+      options_input(key)
+      return
+    end
+
     if pressed?(:mute, key)
       @muted = !@muted
       sync_music
@@ -196,7 +208,7 @@ class RaiBertWindow < Gosu::Window
       up_right: :select_right,
       down_left: :select_left,
       down_right: :select_down
-    }.fetch(action, action) if @screen == :select
+    }.fetch(action, action) if [:select, :options].include?(@screen)
     raise ArgumentError, "Unknown control action: #{action}" unless CONTROL_ACTIONS.include?(action)
 
     button_down(@controls.fetch(action).first)
@@ -204,7 +216,11 @@ class RaiBertWindow < Gosu::Window
 
   def draw
     draw_background
-    @screen == :select ? draw_select : draw_game
+    case @screen
+    when :select then draw_select
+    when :options then draw_options
+    else draw_game
+    end
   end
 
   private
@@ -224,12 +240,19 @@ class RaiBertWindow < Gosu::Window
       play(:select)
     elsif pressed?(:confirm, key)
       start_game
+    elsif pressed?(:options, key)
+      open_options(:select)
     elsif pressed?(:pause, key)
       close
     end
   end
 
   def game_input(key)
+    if @paused && pressed?(:options, key)
+      open_options(:game)
+      return
+    end
+
     if pressed?(:pause, key)
       if [:game_over, :victory].include?(@game.status)
         @screen = :select
@@ -255,6 +278,57 @@ class RaiBertWindow < Gosu::Window
 
     direction = GameState::DIRECTIONS.keys.find { |action| pressed?(action, key) }
     begin_hop(direction) if direction && !@paused && !@hop && !@respawn && @game.status == :playing
+  end
+
+  def open_options(return_screen)
+    @options_return_screen = return_screen
+    @options_selection = 0
+    @rebinding_action = nil
+    @options_message = nil
+    @screen = :options
+    sync_music
+  end
+
+  def options_input(key)
+    if @rebinding_action
+      if pressed?(:pause, key)
+        @rebinding_action = nil
+        @options_message = "CHANGE CANCELLED"
+      else
+        bind_movement_key(@rebinding_action, key)
+      end
+      return
+    end
+
+    if pressed?(:select_up, key) || pressed?(:select_left, key)
+      @options_selection = (@options_selection - 1) % MOVE_ACTIONS.length
+      play(:select)
+    elsif pressed?(:select_down, key) || pressed?(:select_right, key)
+      @options_selection = (@options_selection + 1) % MOVE_ACTIONS.length
+      play(:select)
+    elsif pressed?(:confirm, key)
+      @rebinding_action = MOVE_ACTIONS.fetch(@options_selection)
+      @options_message = "PRESS NEW KEY  //  ESC CANCELS"
+    elsif pressed?(:pause, key) || pressed?(:options, key)
+      @screen = @options_return_screen
+      @rebinding_action = nil
+      sync_music
+    end
+  end
+
+  def bind_movement_key(action, key)
+    name = key_name(key)
+    unavailable = @controls.reject { |other, _keys| other == action }.values.flatten.include?(key)
+    if name.nil? || unavailable
+      @options_message = unavailable ? "KEY ALREADY IN USE" : "KEY NOT SUPPORTED"
+      return
+    end
+
+    @control_names[action] = [name]
+    @controls[action] = [key]
+    @rebinding_action = nil
+    @options_message = "#{MOVE_LABELS.fetch(action)} = #{name.upcase}"
+    play(:select)
   end
 
   def start_game
@@ -417,7 +491,27 @@ class RaiBertWindow < Gosu::Window
     center_text(@small_font, difficulty[:note].upcase, WIDTH / 2, 618, 4, COLORS[:muted])
     center_text(@font, "#{binding_label(:select_left)} / #{binding_label(:select_right)} TO CHOOSE  //  #{binding_label(:confirm)} TO BOOT", WIDTH / 2, 660, 4, COLORS[:white])
     move_keys = GameState::DIRECTIONS.keys.flat_map { |action| @control_names.fetch(action) }.uniq.map(&:upcase).join(" ")
-    center_text(@small_font, "MOVE #{move_keys}  |  #{binding_label(:pause)} pause  |  #{binding_label(:mute)} mute", WIDTH / 2, 708, 4, COLORS[:muted])
+    center_text(@small_font, "MOVE #{move_keys}  |  #{binding_label(:options)} options  |  #{binding_label(:pause)} pause  |  #{binding_label(:mute)} mute", WIDTH / 2, 708, 4, COLORS[:muted])
+  end
+
+  def draw_options
+    center_text(@title_font, "OPTIONS", WIDTH / 2, 72, 4, COLORS[:white])
+    center_text(@small_font, "CHOOSE A DIRECTION, THEN PRESS ENTER", WIDTH / 2, 142, 4, COLORS[:muted])
+
+    MOVE_ACTIONS.each_with_index do |action, index|
+      selected = index == @options_selection
+      y = 220 + index * 82
+      color = selected ? COLORS[:green] : COLORS[:muted]
+      Gosu.draw_rect(270, y, 460, 56, COLORS[:panel], 2)
+      draw_border(270, y, 460, 56, color, 3)
+      @font.draw_text(selected ? ">" : " ", 292, y + 16, 4, 1, 1, color)
+      @font.draw_text(MOVE_LABELS.fetch(action), 330, y + 16, 4, 1, 1, COLORS[:white])
+      @font.draw_text(binding_label(action), 650, y + 16, 4, 1, 1, color)
+    end
+
+    prompt = @rebinding_action ? "PRESS NEW KEY FOR #{MOVE_LABELS.fetch(@rebinding_action)}" : @options_message
+    center_text(@font, prompt.to_s, WIDTH / 2, 580, 4, COLORS[:amber])
+    center_text(@small_font, "ARROWS MOVE  //  ENTER CHANGE  //  ESC BACK", WIDTH / 2, 654, 4, COLORS[:muted])
   end
 
   def draw_game
@@ -435,7 +529,7 @@ class RaiBertWindow < Gosu::Window
     elsif @game.status == :game_over && !@respawn
       overlay("BUILD FAILED", "#{binding_label(:confirm)} retry  //  #{binding_label(:pause)} character select", COLORS[:ruby])
     elsif @paused
-      overlay("PAUSED", "#{binding_label(:pause)} resume  //  #{binding_label(:mute)} #{@muted ? 'unmute' : 'mute'}", COLORS[:amber])
+      overlay("PAUSED", "#{binding_label(:pause)} resume  //  #{binding_label(:options)} options  //  #{binding_label(:mute)} #{@muted ? 'unmute' : 'mute'}", COLORS[:amber])
     end
 
     if game_time < @flash_until
@@ -688,6 +782,11 @@ class RaiBertWindow < Gosu::Window
     raise ArgumentError, "Unknown control key: #{name}" unless Gosu.const_defined?(constant)
 
     Gosu.const_get(constant)
+  end
+
+  def key_name(key)
+    constant = Gosu.constants.grep(/\AKB_/).find { |name| Gosu.const_get(name) == key }
+    constant&.to_s&.delete_prefix("KB_")&.downcase
   end
 
   def pressed?(action, key)

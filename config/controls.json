@@ -1,13 +1,14 @@
 {
-  "up_left": ["q", "w"],
-  "up_right": ["e", "d"],
-  "down_left": ["z", "a"],
-  "down_right": ["c", "s"],
+  "up_left": ["q"],
+  "up_right": ["e"],
+  "down_left": ["a"],
+  "down_right": ["d"],
   "select_left": ["left", "a"],
   "select_right": ["right", "d"],
   "select_up": ["up", "w"],
   "select_down": ["down", "s"],
   "confirm": ["return"],
+  "options": ["o"],
   "pause": ["escape"],
   "mute": ["m"]
 }

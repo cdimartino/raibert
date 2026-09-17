@@ -66,7 +66,7 @@ class BrowserWindowCheck < Gosu::Window
 end
 
 window = BrowserWindowCheck.new.show
-assert(bridge.keys == ["space"], "configured browser keys are registered")
+assert(bridge.keys == Gosu::KEY_NAMES, "all supported browser keys are registered for runtime rebinding")
 bridge.key_callback.call("space")
 bridge.action_callback.call("up_left")
 assert(window.keys == ["space"] && window.actions == [:up_left], "key and semantic action callbacks are routed")
@@ -82,10 +82,32 @@ assert(bridge.failure.include?("bad input"), "input callback failures reach the 
 $LOAD_PATH.unshift(File.expand_path("../web", __dir__))
 require_relative "../game"
 game = RaiBertWindow.new
+assert(
+  RaiBertWindow::MOVE_ACTIONS.to_h { |action| [action, game.instance_variable_get(:@control_names).fetch(action)] } ==
+    { up_left: ["q"], up_right: ["e"], down_left: ["a"], down_right: ["d"] },
+  "movement defaults use one Q/E/A/D key per direction"
+)
 game.press(:up_right)
 game.press(:up_left)
 assert(game.instance_variable_get(:@selection) == 1, "touch up-right selects the character on the selection screen")
 assert(game.instance_variable_get(:@difficulty_selection) == 0, "touch up-left selects the difficulty on the selection screen")
+game.press(:options)
+assert(game.instance_variable_get(:@screen) == :options, "options open before starting")
+game.press(:confirm)
+game.button_down("r")
+assert(game.instance_variable_get(:@control_names).fetch(:up_left) == ["r"], "options replace a movement binding")
+game.press(:down_right)
+game.press(:confirm)
+game.button_down("r")
+assert(game.instance_variable_get(:@control_names).fetch(:up_right) == ["e"], "duplicate movement binding is rejected")
+game.press(:pause)
+game.press(:pause)
+game.press(:confirm)
+game.press(:pause)
+game.press(:options)
+assert(game.instance_variable_get(:@screen) == :options, "options open while paused")
+game.press(:pause)
+assert(game.instance_variable_get(:@screen) == :game && game.instance_variable_get(:@paused), "leaving options returns to paused game")
 begin
   game.press(:not_a_control)
   raise "invalid semantic action was accepted"
