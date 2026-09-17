@@ -15,7 +15,8 @@ Rai*bert is a Q*bert-inspired Ruby arcade game. Turn every failing build tile in
 - Three enemy behaviors: descending bugs, chasing exceptions, and regressions that undo tile progress.
 - Five falling, limited-time powerups: enemy freeze, enemy clear, extra life, shield, and tile repair.
 - Two selectable Rai characters with directional hops, themed idle loops, and death/respawn animation.
-- Layered stage presentation with illustrated worlds, atmospheric bands, data lanes, particles, palettes, and a unique looping chiptune track for every level.
+- Layered stage presentation with illustrated worlds, atmospheric bands, data lanes, particles, palettes, and quiet ambient music with a different phrase for each level.
+- Soft, distinct cues for takeoff, touchdown, tile completion, each powerup, rescue, and success or failure; music sits behind the game sounds.
 - One-use rescue platforms on both edges of each stage.
 - No checkpoints: by default, Game Over restarts at Level 1, while clearing Level 20 reaches the victory screen.
 
@@ -108,6 +109,10 @@ The build requires a running Docker daemon. It compiles the pinned CRuby 4.0.7 W
 
 Docker must support `linux/amd64` containers. The script reuses the ignored `build/web-runtime` cache and invalidates its compiled Ruby base when build inputs change. Changes limited to `public/index.html`, `public/web/app.css`, or `public/web/app.js` are served directly and do not require a Wasm rebuild.
 
+### Regenerate the audio
+
+Run `python3 script/build_audio.py` to regenerate the original 20 ambient loops and 15 effects using Python's standard library. The score uses slow D-major harmony, warm pads, and sparse mallet notes at 60 BPM, with no percussion. WAVs are checked in and shared by desktop and browser; audio generation is not needed to play. The mix lives in `game.rb` (music `0.18`, effects `0.55`); individual cue envelopes and levels live in the generator.
+
 ## Command-line options
 
 These options apply to the native desktop launch only; the browser always opens the character and difficulty selection screen at Level 1.
@@ -176,6 +181,7 @@ mise exec -- bundle check
 mise exec -- bundle exec ruby test/smoke_test.rb
 mise exec -- ruby test/web_shim_test.rb
 mise exec -- bundle exec ruby test/rack_test.rb
+node test/audio_test.mjs
 ```
 
 The smoke test covers campaign progression, CLI validation, difficulty scaling, enemies, touchdown timing, rescues, powerup effects and expiry, life limits, Game Over reset, and Level 20 victory.
@@ -193,6 +199,8 @@ public/                  Browser shell and compiled WebAssembly runtime
 script/build_web         Reproducible Docker-based web runtime build
 assets/art/             Stage, enemy, rescue, and powerup artwork
 assets/music/           One soundtrack per level
+assets/sounds/          Distinct soft gameplay cues
+script/build_audio.py   Reproducible ambient score and sound effects
 assets/rai*/            Character sprite sheets
 test/smoke_test.rb      Runnable gameplay rules check
 ```

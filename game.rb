@@ -109,6 +109,7 @@ class RaiBertWindow < Gosu::Window
     up_left: "UP-LEFT", up_right: "UP-RIGHT", down_left: "DOWN-LEFT", down_right: "DOWN-RIGHT"
   }.freeze
   KEY_ALIASES = { "enter" => "return", "esc" => "escape" }.freeze
+  EFFECTS = %i[select start hop land tile debugger gc life shield patch rescue stage_clear victory fall hit].freeze
 
   def initialize(start_level: 1, starting_lives: nil, difficulty: nil)
     super(WIDTH, HEIGHT, fullscreen: false)
@@ -120,11 +121,12 @@ class RaiBertWindow < Gosu::Window
       path = File.join(__dir__, character[:path])
       [character[:id], Gosu::Image.load_tiles(path, 192, 208, tileable: false)]
     end
-    sound_path = File.join(__dir__, "assets/blip.wav")
-    @sound = Gosu::Sample.new(sound_path) if File.exist?(sound_path)
+    @sounds = EFFECTS.to_h do |event|
+      [event, Gosu::Sample.new(File.join(__dir__, "assets/sounds/#{event}.wav"))]
+    end
     @backgrounds = THEMES.map { |theme| Gosu::Image.new(File.join(__dir__, "assets/art/#{theme[:art]}.png")) }
     @songs = THEMES.map { |theme| Gosu::Song.new(File.join(__dir__, "assets/music/#{theme[:music]}.wav")) }
-    @songs.each { |song| song.volume = 0.32 }
+    @songs.each { |song| song.volume = 0.18 }
     atlas = Gosu::Image.load_tiles(File.join(__dir__, "assets/art/objects.png"), 512, 512)
     @objects = %i[bug exception regression debugger gc rescue].zip(atlas).to_h
     @powerups = POWERUP_STYLES.keys.to_h do |kind|
@@ -368,6 +370,7 @@ class RaiBertWindow < Gosu::Window
 
   def land_hop(now)
     hop = @hop
+    previous_tile = @game.tiles[hop[:target]]
     event = @game.move(hop[:direction], now)
     @hop = nil
     if [:fall, :hit].include?(event)
@@ -376,7 +379,12 @@ class RaiBertWindow < Gosu::Window
     else
       @idle_started_at = now
     end
-    play(event) unless event == :hop
+    if event == :hop
+      completed = previous_tile < @game.target && @game.tiles[hop[:target]] == @game.target
+      play(completed ? :tile : :land)
+    else
+      play(event)
+    end
   end
 
   def start_respawn(position, now)
@@ -384,14 +392,9 @@ class RaiBertWindow < Gosu::Window
   end
 
   def play(event)
-    return if @muted || !@sound
+    return if @muted
 
-    speed = {
-      select: 1.1, start: 1.5, hop: 1.0, debugger: 1.8, gc: 0.65,
-      life: 1.65, shield: 1.4, patch: 1.2, rescue: 1.35,
-      stage_clear: 2.0, victory: 2.0, fall: 0.55, hit: 0.45
-    }.fetch(event, 1.0)
-    @sound.play(0.28, speed)
+    @sounds&.fetch(event, nil)&.play(0.55)
   end
 
   def play_level_music

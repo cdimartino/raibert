@@ -46,7 +46,7 @@ tiles.last.draw(5, 6, 1, 0.5, 0.5)
 Gosu.flush
 assert(bridge.rendered.map { |command| command.fetch("kind") } == %w[rect image], "draw commands reach the browser")
 assert(bridge.rendered.map { |command| command.fetch("order") } == [0, 1], "draw order is stable before z sorting")
-assert(File.exist?("/app/assets/blip.wav"), "browser-served assets are visible to optional asset checks")
+assert(File.exist?("/app/assets/sounds/hop.wav"), "browser-served assets are visible to optional asset checks")
 assert(!File.exist?("/app/not-an-asset"), "unrelated virtual paths are not invented")
 
 class BrowserWindowCheck < Gosu::Window

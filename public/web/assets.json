@@ -12,6 +12,22 @@
     "/assets/art/powerups/shield.png",
     "/assets/art/powerups/patch.png"
   ],
-  "effect": "/assets/blip.wav",
+  "effects": [
+    "/assets/sounds/select.wav",
+    "/assets/sounds/start.wav",
+    "/assets/sounds/hop.wav",
+    "/assets/sounds/land.wav",
+    "/assets/sounds/tile.wav",
+    "/assets/sounds/debugger.wav",
+    "/assets/sounds/gc.wav",
+    "/assets/sounds/life.wav",
+    "/assets/sounds/shield.wav",
+    "/assets/sounds/patch.wav",
+    "/assets/sounds/rescue.wav",
+    "/assets/sounds/stage_clear.wav",
+    "/assets/sounds/victory.wav",
+    "/assets/sounds/fall.wav",
+    "/assets/sounds/hit.wav"
+  ],
   "initialSong": "/assets/music/build.wav"
 }

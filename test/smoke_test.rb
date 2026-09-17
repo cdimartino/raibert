@@ -84,12 +84,29 @@ rescue ArgumentError
 end
 completion_sound = Object.new
 completion_plays = []
-completion_sound.define_singleton_method(:play) { |volume, speed| completion_plays << [volume, speed] }
+completion_sound.define_singleton_method(:play) { |volume| completion_plays << volume }
 completion_window = RaiBertWindow.allocate
 completion_window.instance_variable_set(:@muted, false)
-completion_window.instance_variable_set(:@sound, completion_sound)
+completion_window.instance_variable_set(:@sounds, { victory: completion_sound })
 completion_window.send(:play, :victory)
-assert(completion_plays == [[0.28, 2.0]], "victory plays the completion effect")
+assert(completion_plays == [0.55], "victory plays its own completion effect at the intended mix")
+completion_window.instance_variable_set(:@muted, true)
+completion_window.send(:play, :victory)
+assert(completion_plays == [0.55], "muting suppresses effects")
+
+landing_events = []
+window.define_singleton_method(:play) { |event| landing_events << event }
+landing_game.enemies.clear
+landing_game.instance_variable_set(:@last_spawn_at, 10_000)
+window.press(:down_left)
+window.instance_variable_set(:@test_time, 3_000 + RaiBertWindow::JUMP_TIME * 2)
+window.update
+assert(landing_events == [:hop, :tile], "takeoff and newly completed tiles have distinct cues")
+landing_events.clear
+window.press(:up_right)
+window.instance_variable_set(:@test_time, 3_000 + RaiBertWindow::JUMP_TIME * 3)
+window.update
+assert(landing_events == [:hop, :land], "revisiting a finished tile gives a soft landing without another reward")
 
 easy = GameState.new(random: Random.new(1), now: 0, difficulty: :easy)
 hard = GameState.new(random: Random.new(1), now: 0, difficulty: :hard)

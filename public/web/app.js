@@ -92,7 +92,7 @@ class AudioEngine {
   resume() {
     this.context ||= new AudioContext();
     const startPendingSong = () => {
-      if (this.song && !this.song.source) {
+      if (this.song && !this.song.paused && !this.song.source) {
         this.playSong(this.song.url, this.song.volume, this.song.looping).catch(console.error);
       }
     };
@@ -142,10 +142,11 @@ class AudioEngine {
   async playSong(url, volume, looping) {
     if (!this.song || this.song.url !== url) {
       this.stopSong();
-      this.song = { url, volume, looping, offset: 0, source: null, startedAt: 0 };
+      this.song = { url, volume, looping, offset: 0, source: null, startedAt: 0, paused: false };
     } else {
       this.song.volume = volume;
       this.song.looping = looping;
+      this.song.paused = false;
     }
     if (!this.context) return;
     const token = ++this.token;
@@ -156,23 +157,34 @@ class AudioEngine {
     const gain = audio.createGain();
     source.buffer = buffer;
     source.loop = looping;
-    gain.gain.value = volume;
+    gain.gain.setValueAtTime(0, audio.currentTime);
+    gain.gain.linearRampToValueAtTime(volume, audio.currentTime + 0.04);
     source.connect(gain).connect(audio.destination);
     this.song.source = source;
+    this.song.gain = gain;
     this.song.startedAt = audio.currentTime;
     source.start(0, this.song.offset % buffer.duration);
   }
 
   pauseSong() {
     this.token++;
+    if (this.song) this.song.paused = true;
     if (!this.song?.source) return;
     this.song.offset += this.context.currentTime - this.song.startedAt;
-    this.song.source.stop();
+    this.fadeOutSong();
     this.song.source = null;
   }
 
+  fadeOutSong() {
+    if (!this.song?.source) return;
+    const now = this.context.currentTime;
+    this.song.gain.gain.cancelAndHoldAtTime(now);
+    this.song.gain.gain.linearRampToValueAtTime(0, now + 0.04);
+    this.song.source.stop(now + 0.04);
+  }
+
   stopSong() {
-    if (this.song?.source) this.song.source.stop();
+    this.fadeOutSong();
     this.song = null;
     this.token++;
   }
@@ -313,7 +325,7 @@ async function boot() {
   const assets = await assetsResponse.json();
   const runtimeFiles = await runtimeResponse.json();
   await preloadImages(assets.images);
-  audio.preload(assets.effect);
+  assets.effects.forEach(url => audio.preload(url));
   audio.preload(assets.initialSong);
   status.textContent = "Loading Ruby…";
   const runtime = await import(`/web/${runtimeFiles.javascript}`);
