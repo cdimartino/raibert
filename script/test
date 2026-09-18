@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 bundle exec ruby test/unit_coverage_test.rb
+ruby test/leaderboard_test.rb
 ruby test/web_shim_test.rb
 bundle exec ruby test/rack_test.rb
 bundle exec ruby test/site_test.rb

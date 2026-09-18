@@ -39,6 +39,9 @@ jobs:
           ruby-version: 4.0.7
           bundler-cache: true
 
+      - name: Rebuild Ruby WebAssembly application
+        run: script/build_web
+
       - name: Package static site
         run: script/package_site "$RUNNER_TEMP/raibert-site"
 

@@ -82,6 +82,18 @@ module Gosu
 
       "/#{path[index..]}"
     end
+
+    def browser_preferences
+      JSON.parse(bridge.call(:preferences).to_s)
+    end
+
+    def save_browser_preferences(settings)
+      bridge.call(:savePreferences, JSON.generate(settings))
+    end
+
+    def publish_game_state(state)
+      bridge.call(:publishGameState, JSON.generate(state))
+    end
   end
 
   class Window
@@ -106,7 +118,9 @@ module Gosu
       end
       key = proc { |name| safely { button_down(name.to_s) } unless @closed }
       action = proc { |name| safely { press(name.to_s.to_sym) } unless @closed }
-      Gosu.bridge.call(:start, frame, key, action, JSON.generate(KEY_NAMES))
+      resize_callback = proc { |width, height| safely { resize(width.to_i, height.to_i) } unless @closed }
+      world_score = proc { |score| safely { update_world_score(score.nil? ? nil : score.to_i) } unless @closed }
+      Gosu.bridge.call(:start, frame, key, action, resize_callback, world_score, JSON.generate(KEY_NAMES))
       self
     end
 

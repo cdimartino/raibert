@@ -38,6 +38,9 @@ jobs:
       - name: Enforce 100% GameState unit coverage
         run: bundle exec ruby test/unit_coverage_test.rb
 
+      - name: Test leaderboard ranking and validation domain
+        run: ruby test/leaderboard_test.rb
+
       - name: Run browser shim and HTTP integration tests
         run: |
           ruby test/web_shim_test.rb
@@ -81,6 +84,9 @@ jobs:
         run: |
           npm ci --prefix web
           npx --prefix web playwright install --with-deps chromium
+
+      - name: Rebuild Ruby WebAssembly application
+        run: script/build_web
 
       - name: Run Web Audio unit tests
         run: npm --prefix web test

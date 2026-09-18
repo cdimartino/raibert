@@ -8,6 +8,7 @@ Coverage.start(lines: true)
 
 load File.expand_path("collision_test.rb", __dir__)
 load File.expand_path("smoke_test.rb", __dir__)
+load File.expand_path("leaderboard_test.rb", __dir__)
 
 def coverage_assert(condition, message)
   raise "Unit coverage check failed: #{message}" unless condition
@@ -72,23 +73,26 @@ finished.send(:advance_stage, 1_000)
 coverage_assert(finished.status == :victory, "advancing past the final level stays at victory")
 
 result = Coverage.result
-target = File.expand_path("../lib/game_state.rb", __dir__)
-lines = result.fetch(target).fetch(:lines)
-executable = lines.each_index.select { |index| !lines[index].nil? }
-missed = executable.select { |index| lines[index].zero? }
-percentage = ((executable.length - missed.length) * 100.0 / executable.length).round(2)
+targets = [File.expand_path("../lib/game_state.rb", __dir__), File.expand_path("../leaderboard/leaderboard.rb", __dir__)]
+reports = targets.map do |target|
+  lines = result.fetch(target).fetch(:lines)
+  executable = lines.each_index.select { |index| !lines[index].nil? }
+  missed = executable.select { |index| lines[index].zero? }
+  percentage = ((executable.length - missed.length) * 100.0 / executable.length).round(2)
+  { file: target, covered_lines: executable.length - missed.length, executable_lines: executable.length,
+    percentage: percentage, missed_lines: missed.map { |index| index + 1 } }
+end
 
 FileUtils.mkdir_p(File.expand_path("../coverage", __dir__))
 File.write(
   File.expand_path("../coverage/unit.json", __dir__),
   JSON.pretty_generate(
-    file: target,
-    covered_lines: executable.length - missed.length,
-    executable_lines: executable.length,
-    percentage: percentage,
-    missed_lines: missed.map { |index| index + 1 }
+    files: reports,
+    percentage: (reports.sum { |report| report[:covered_lines] } * 100.0 / reports.sum { |report| report[:executable_lines] }).round(2)
   ) + "\n"
 )
 
-coverage_assert(missed.empty?, "GameState line coverage is #{percentage}% (missed #{missed.map { |index| index + 1 }.join(', ')})")
-puts "GameState unit coverage: 100% (#{executable.length}/#{executable.length} lines)"
+reports.each do |report|
+  coverage_assert(report[:missed_lines].empty?, "#{File.basename(report[:file])} line coverage is #{report[:percentage]}% (missed #{report[:missed_lines].join(', ')})")
+  puts "#{File.basename(report[:file], '.rb')} unit coverage: 100% (#{report[:executable_lines]}/#{report[:executable_lines]} lines)"
+end

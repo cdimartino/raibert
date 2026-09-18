@@ -7,7 +7,7 @@ def assert(condition, message)
 end
 
 class BrowserBridgeStub
-  attr_reader :rendered, :frame_callback, :key_callback, :action_callback, :keys, :failure
+  attr_reader :rendered, :frame_callback, :key_callback, :action_callback, :resize_callback, :world_score_callback, :keys, :failure
 
   def call(method, *arguments)
     case method
@@ -15,9 +15,10 @@ class BrowserBridgeStub
     when :imageSize then "384,416"
     when :textWidth then arguments.last.to_s.length * 10
     when :render then @rendered = JSON.parse(arguments.fetch(0))
+    when :preferences then "{}"
     when :start
-      @frame_callback, @key_callback, @action_callback = arguments.take(3)
-      @keys = JSON.parse(arguments.fetch(3))
+      @frame_callback, @key_callback, @action_callback, @resize_callback, @world_score_callback = arguments.take(5)
+      @keys = JSON.parse(arguments.fetch(5))
     when :fail then @failure = arguments.fetch(0)
     end
   end

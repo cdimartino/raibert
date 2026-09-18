@@ -7,6 +7,8 @@ STACK_NAME="${STACK_NAME:-raibert-prod}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 AWS_PROFILE="${AWS_PROFILE:-raibert-admin}"
 
+command -v sam >/dev/null || { echo "AWS SAM CLI is required to package the Ruby Lambda function." >&2; exit 1; }
+
 identity="$(aws sts get-caller-identity --profile "$AWS_PROFILE" --output json)"
 identity_arn="$(ruby -rjson -e 'puts JSON.parse(STDIN.read).fetch("Arn")' <<< "$identity")"
 account_id="$(ruby -rjson -e 'puts JSON.parse(STDIN.read).fetch("Account")' <<< "$identity")"
@@ -71,12 +73,13 @@ else
   fi
 fi
 
-aws cloudformation deploy \
+sam deploy \
   --profile "$AWS_PROFILE" \
   --region "$AWS_REGION" \
   --stack-name "$STACK_NAME" \
   --template-file "$ROOT/infra/site.yml" \
-  --capabilities CAPABILITY_NAMED_IAM \
+  --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+  --resolve-s3 \
   --no-fail-on-empty-changes \
   --parameter-overrides \
     HostedZoneId="$hosted_zone_id" \

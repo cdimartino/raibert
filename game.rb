@@ -152,10 +152,24 @@ class RaiBertWindow < Gosu::Window
     @options_selection = 0
     @rebinding_action = nil
     @options_message = nil
+    @viewport_width = WIDTH
+    @viewport_height = HEIGHT
+    @world_score = nil
+    @last_published_state = nil
+    apply_browser_preferences
   end
 
   def needs_cursor?
     false
+  end
+
+  def resize(width, height)
+    @viewport_width = [width.to_i, 320].max
+    @viewport_height = [height.to_i, 320].max
+  end
+
+  def update_world_score(score)
+    @world_score = score.nil? ? nil : [score.to_i, 0].max
   end
 
   def update
@@ -186,6 +200,7 @@ class RaiBertWindow < Gosu::Window
     elsif GameState::PICKUP_KINDS.include?(event)
       play(event)
     end
+    publish_browser_state
   end
 
   def button_down(key)
@@ -197,6 +212,7 @@ class RaiBertWindow < Gosu::Window
     if pressed?(:mute, key)
       @muted = !@muted
       sync_music
+      save_browser_preferences
       return
     end
 
@@ -233,15 +249,19 @@ class RaiBertWindow < Gosu::Window
     if pressed?(:select_left, key)
       @selection = (@selection - 1) % CHARACTERS.length
       play(:select)
+      save_browser_preferences
     elsif pressed?(:select_right, key)
       @selection = (@selection + 1) % CHARACTERS.length
       play(:select)
+      save_browser_preferences
     elsif pressed?(:select_up, key)
       @difficulty_selection = (@difficulty_selection - 1) % DIFFICULTY_KEYS.length
       play(:select)
+      save_browser_preferences
     elsif pressed?(:select_down, key)
       @difficulty_selection = (@difficulty_selection + 1) % DIFFICULTY_KEYS.length
       play(:select)
+      save_browser_preferences
     elsif pressed?(:confirm, key)
       start_game
     elsif pressed?(:options, key)
@@ -333,6 +353,7 @@ class RaiBertWindow < Gosu::Window
     @rebinding_action = nil
     @options_message = "#{MOVE_LABELS.fetch(action)} = #{name.upcase}"
     play(:select)
+    save_browser_preferences
   end
 
   def start_game
@@ -350,6 +371,7 @@ class RaiBertWindow < Gosu::Window
     @idle_started_at = game_time
     play_level_music
     play(:start)
+    publish_browser_state(force: true)
   end
 
   def begin_hop(direction)
@@ -387,6 +409,7 @@ class RaiBertWindow < Gosu::Window
     else
       play(event)
     end
+    publish_browser_state
   end
 
   def start_respawn(position, now)
@@ -440,45 +463,51 @@ class RaiBertWindow < Gosu::Window
   def draw_background
     background = @backgrounds[theme_index]
     now = Gosu.milliseconds
-    scale = [WIDTH.to_f / background.width, HEIGHT.to_f / background.height].max * 1.08
+    scale = [viewport_width.to_f / background.width, viewport_height.to_f / background.height].max * 1.08
     width = background.width * scale
     height = background.height * scale
     pan_x = Math.sin((now + theme_index * 700) / 5_000.0) * 10
     pan_y = Math.cos((now + theme_index * 430) / 6_000.0) * 7
-    background.draw((WIDTH - width) / 2 + pan_x, (HEIGHT - height) / 2 + pan_y, 0, scale, scale)
+    background.draw((viewport_width - width) / 2 + pan_x, (viewport_height - height) / 2 + pan_y, 0, scale, scale)
 
     layer_color = accent
-    Gosu.draw_rect(0, 0, WIDTH, HEIGHT, alpha_color(layer_color, 22), 0.1)
+    Gosu.draw_rect(0, 0, viewport_width, viewport_height, alpha_color(layer_color, 22), 0.1)
     36.times do |index|
       speed = 55.0 + (index % 9) * 8
-      x = (index * 137 + theme_index * 53 + now / speed) % WIDTH
-      y = (index * 71 + theme_index * 41 - now / (speed * 1.7)) % HEIGHT
+      x = (index * 137 + theme_index * 53 + now / speed) % viewport_width
+      y = (index * 71 + theme_index * 41 - now / (speed * 1.7)) % viewport_height
       size = 1 + (index % 3)
       Gosu.draw_rect(x, y, size, size, alpha_color(layer_color, 70 + (index % 4) * 18), 0.2)
     end
 
     6.times do |index|
-      drift = (now / (24.0 + index * 5) + index * 193 + theme_index * 47) % (WIDTH + 300) - 150
+      drift = (now / (24.0 + index * 5) + index * 193 + theme_index * 47) % (viewport_width + 300) - 150
       lean = (theme_index.even? ? 1 : -1) * (80 + index * 9)
       color = alpha_color(layer_color, 18 + index * 3)
       Gosu.draw_quad(drift, 0, color, drift + 2, 0, color,
-                     drift + lean + 2, HEIGHT, color, drift + lean, HEIGHT, color, 0.25)
+                     drift + lean + 2, viewport_height, color, drift + lean, viewport_height, color, 0.25)
     end
 
     4.times do |index|
       y = 150 + index * 155 + Math.sin((now + index * 900 + theme_index * 300) / 1_800.0) * 22
-      Gosu.draw_rect(0, y, WIDTH, 42, alpha_color(layer_color, 10 + index * 2), 0.3)
+      Gosu.draw_rect(0, y, viewport_width, 42, alpha_color(layer_color, 10 + index * 2), 0.3)
     end
-    Gosu.draw_rect(0, 0, WIDTH, HEIGHT, 0x18040912, 0.35)
+    Gosu.draw_rect(0, 0, viewport_width, viewport_height, 0x18040912, 0.35)
   end
 
   def draw_select
-    center_text(@title_font, "RAI*BERT", WIDTH / 2 + 3, 61, 3.9, COLORS[:shadow])
-    center_text(@title_font, "RAI*BERT", WIDTH / 2, 58, 4, COLORS[:white])
-    center_text(@font, "A RUBY ARCADE ODYSSEY", WIDTH / 2, 124, 4, accent)
+    center_text(@title_font, "RAI*BERT", viewport_width / 2 + 3, 61, 3.9, COLORS[:shadow])
+    center_text(@title_font, "RAI*BERT", viewport_width / 2, 58, 4, COLORS[:white])
+    center_text(@font, "A RUBY ARCADE ODYSSEY", viewport_width / 2, 124, 4, accent)
 
     CHARACTERS.each_with_index do |character, index|
-      x = index.zero? ? 300 : 700
+      next if portrait? && index != @selection
+
+      x = if portrait?
+            viewport_width / 2
+          else
+            viewport_width / 2 + (index.zero? ? -200 : 200)
+          end
       selected = index == @selection
       border = selected ? COLORS[:green] : COLORS[:muted]
       Gosu.draw_rect(x - 155, 190, 310, 390, COLORS[:panel], 2)
@@ -492,31 +521,34 @@ class RaiBertWindow < Gosu::Window
     end
 
     difficulty = GameState::DIFFICULTIES.fetch(DIFFICULTY_KEYS.fetch(@difficulty_selection))
-    center_text(@font, "#{binding_label(:select_up)} / #{binding_label(:select_down)}  DIFFICULTY: #{difficulty[:label]}", WIDTH / 2, 590, 4, accent)
-    center_text(@small_font, difficulty[:note].upcase, WIDTH / 2, 618, 4, COLORS[:muted])
-    center_text(@font, "#{binding_label(:select_left)} / #{binding_label(:select_right)} TO CHOOSE  //  #{binding_label(:confirm)} TO BOOT", WIDTH / 2, 660, 4, COLORS[:white])
+    base_y = portrait? ? [viewport_height - 230, 610].max : 590
+    center_text(@font, "#{portrait? ? 'SWIPE UP / DOWN' : "#{binding_label(:select_up)} / #{binding_label(:select_down)}"}  DIFFICULTY: #{difficulty[:label]}", viewport_width / 2, base_y, 4, accent)
+    center_text(@small_font, difficulty[:note].upcase, viewport_width / 2, base_y + 28, 4, COLORS[:muted])
+    choose = portrait? ? "SWIPE TO CHOOSE  //  TAP TO BOOT  //  HOLD FOR MENU" : "#{binding_label(:select_left)} / #{binding_label(:select_right)} TO CHOOSE  //  #{binding_label(:confirm)} TO BOOT"
+    center_text(@font, choose, viewport_width / 2, base_y + 70, 4, COLORS[:white])
     move_keys = GameState::DIRECTIONS.keys.flat_map { |action| @control_names.fetch(action) }.uniq.map(&:upcase).join(" ")
-    center_text(@small_font, "MOVE #{move_keys}  |  #{binding_label(:options)} options  |  #{binding_label(:pause)} pause  |  #{binding_label(:mute)} mute", WIDTH / 2, 708, 4, COLORS[:muted])
+    center_text(@small_font, "MOVE #{move_keys}  |  #{binding_label(:options)} options  |  #{binding_label(:pause)} pause  |  #{binding_label(:mute)} mute", viewport_width / 2, base_y + 118, 4, COLORS[:muted]) unless portrait?
   end
 
   def draw_options
-    center_text(@title_font, "OPTIONS", WIDTH / 2, 72, 4, COLORS[:white])
-    center_text(@small_font, "CHOOSE A DIRECTION, THEN PRESS ENTER", WIDTH / 2, 142, 4, COLORS[:muted])
+    center_text(@title_font, "OPTIONS", viewport_width / 2, 72, 4, COLORS[:white])
+    center_text(@small_font, "CHOOSE A DIRECTION, THEN PRESS ENTER", viewport_width / 2, 142, 4, COLORS[:muted])
 
     MOVE_ACTIONS.each_with_index do |action, index|
       selected = index == @options_selection
       y = 220 + index * 82
       color = selected ? COLORS[:green] : COLORS[:muted]
-      Gosu.draw_rect(270, y, 460, 56, COLORS[:panel], 2)
-      draw_border(270, y, 460, 56, color, 3)
-      @font.draw_text(selected ? ">" : " ", 292, y + 16, 4, 1, 1, color)
-      @font.draw_text(MOVE_LABELS.fetch(action), 330, y + 16, 4, 1, 1, COLORS[:white])
-      @font.draw_text(binding_label(action), 650, y + 16, 4, 1, 1, color)
+      left = viewport_width / 2 - 230
+      Gosu.draw_rect(left, y, 460, 56, COLORS[:panel], 2)
+      draw_border(left, y, 460, 56, color, 3)
+      @font.draw_text(selected ? ">" : " ", left + 22, y + 16, 4, 1, 1, color)
+      @font.draw_text(MOVE_LABELS.fetch(action), left + 60, y + 16, 4, 1, 1, COLORS[:white])
+      @font.draw_text(binding_label(action), left + 380, y + 16, 4, 1, 1, color)
     end
 
     prompt = @rebinding_action ? "PRESS NEW KEY FOR #{MOVE_LABELS.fetch(@rebinding_action)}" : @options_message
-    center_text(@font, prompt.to_s, WIDTH / 2, 580, 4, COLORS[:amber])
-    center_text(@small_font, "ARROWS MOVE  //  ENTER CHANGE  //  ESC BACK", WIDTH / 2, 654, 4, COLORS[:muted])
+    center_text(@font, prompt.to_s, viewport_width / 2, 580, 4, COLORS[:amber])
+    center_text(@small_font, "ARROWS MOVE  //  ENTER CHANGE  //  ESC BACK", viewport_width / 2, 654, 4, COLORS[:muted])
   end
 
   def draw_game
@@ -538,35 +570,31 @@ class RaiBertWindow < Gosu::Window
     end
 
     if game_time < @flash_until
-      Gosu.draw_rect(0, 0, WIDTH, HEIGHT, Gosu::Color.new(0x44_ff174f), 20)
+      Gosu.draw_rect(0, 0, viewport_width, viewport_height, Gosu::Color.new(0x44_ff174f), 20)
     end
   end
 
   def draw_hud
     fixed = @game.tiles.count { |_tile, value| value == @game.target }
-    Gosu.draw_rect(16, 12, WIDTH - 32, 80, 0xe609101e, 4.9)
-    Gosu.draw_rect(16, 12, 3, 80, accent, 5)
-    @font.draw_text(format("STAGE %02d :: %s", @game.stage, LEVEL_NAMES.fetch(@game.level - 1)), 28, 22, 5, 1, 1, accent)
-    @small_font.draw_text(format("PASS %02d/28", fixed), 30, 54, 5, 1, 1, COLORS[:white])
-    center_text(@font, format("SCORE %07d", @game.score), WIDTH / 2, 22, 5, COLORS[:white])
-    @small_font.draw_text("LIVES", 772, 29, 5, 1, 1, COLORS[:muted])
-    if @game.lives <= 5
-      @game.lives.times { |index| sprite(@character, 0, 0).draw(820 + index * 31, 14, 5, 0.20, 0.20) }
-    else
-      sprite(@character, 0, 0).draw(820, 14, 5, 0.20, 0.20)
-      @font.draw_text("x#{@game.lives}", 854, 24, 5, 1, 1, COLORS[:white])
-    end
-    @small_font.draw_text(@game.difficulty.to_s.upcase, 790, 54, 5, 1, 1, accent)
-    @small_font.draw_text(@muted ? "MUTED" : "SOUND ON", 878, 54, 5, 1, 1, COLORS[:muted])
+    world = @world_score ? format("%07d", @world_score) : "-------"
+    hud_height = portrait? ? 112 : 80
+    Gosu.draw_rect(16, 12, viewport_width - 32, hud_height, 0xe609101e, 4.9)
+    Gosu.draw_rect(16, 12, 3, hud_height, accent, 5)
+    @small_font.draw_text(format("STAGE %02d  %s", @game.stage, LEVEL_NAMES.fetch(@game.level - 1)), 28, 22, 5, 1, 1, accent)
+    @small_font.draw_text(format("PASS %02d/28  LIVES %02d  %s", fixed, @game.lives, @game.difficulty.to_s.upcase), 28, 48, 5, 1, 1, COLORS[:white])
+    center_text(@font, format("SCORE %07d // WORLD %s", @game.score, world), viewport_width / 2, portrait? ? 78 : 22, 5, COLORS[:white])
+    @small_font.draw_text(@muted ? "MUTED" : "SOUND ON", viewport_width - 112, 54, 5, 1, 1, COLORS[:muted]) unless portrait?
     effects = []
     effects << "DEBUGGER: FROZEN" if game_time < @game.freeze_until
     effects << "SHIELD: #{((@game.shield_until - game_time) / 1_000.0).ceil}s" if game_time < @game.shield_until
-    center_text(@small_font, effects.join("  //  "), WIDTH / 2, 60, 5, COLORS[:cyan]) unless effects.empty?
+    center_text(@small_font, effects.join("  //  "), viewport_width / 2, portrait? ? 128 : 60, 5, COLORS[:cyan]) unless effects.empty?
     controls = [[:up_left, "up-left"], [:up_right, "up-right"], [:down_left, "down-left"], [:down_right, "down-right"]]
     legend = controls.map { |action, label| "#{binding_label(action)} #{label}" }.join("    ")
-    Gosu.draw_rect(16, 690, WIDTH - 32, 60, 0xe609101e, 4.9)
-    center_text(@small_font, THEMES[theme_index][:name], WIDTH / 2, 699, 5, accent)
-    center_text(@small_font, legend, WIDTH / 2, 724, 5, COLORS[:muted])
+    unless portrait?
+      Gosu.draw_rect(16, viewport_height - 70, viewport_width - 32, 60, 0xe609101e, 4.9)
+      center_text(@small_font, THEMES[theme_index][:name], viewport_width / 2, viewport_height - 61, 5, accent)
+      center_text(@small_font, legend, viewport_width / 2, viewport_height - 36, 5, COLORS[:muted])
+    end
     Gosu.draw_rect(130, 61, 220, 5, 0xff263444, 5)
     Gosu.draw_rect(130, 61, 220 * fixed / 28.0, 5, accent, 5.1)
   end
@@ -575,27 +603,22 @@ class RaiBertWindow < Gosu::Window
     GameState::ROWS.times do |row|
       (row + 1).times do |column|
         x, y = tile_center([row, column])
+        tw, th = tile_width, tile_height
         progress = @game.tiles[[row, column]]
         top_color, label = tile_style(progress)
         side_left = darken(top_color, 0.48)
         side_right = darken(top_color, 0.32)
         z = 2 + row * 0.01
-        draw_diamond(x, y + 24, TILE_WIDTH / 2 + 5, TILE_HEIGHT / 2, 0x66000000, z - 0.01)
-        Gosu.draw_quad(x - TILE_WIDTH / 2, y, side_left,
-                       x, y + TILE_HEIGHT / 2, side_left,
-                       x, y + TILE_HEIGHT / 2 + 18, COLORS[:shadow],
-                       x - TILE_WIDTH / 2, y + 18, COLORS[:shadow], z)
-        Gosu.draw_quad(x, y + TILE_HEIGHT / 2, side_right,
-                       x + TILE_WIDTH / 2, y, side_right,
-                       x + TILE_WIDTH / 2, y + 18, COLORS[:shadow],
-                       x, y + TILE_HEIGHT / 2 + 18, COLORS[:shadow], z)
-        Gosu.draw_quad(x, y - TILE_HEIGHT / 2, top_color,
-                       x + TILE_WIDTH / 2, y, top_color,
-                       x, y + TILE_HEIGHT / 2, top_color,
-                       x - TILE_WIDTH / 2, y, top_color, z + 0.01)
+        draw_diamond(x, y + th / 2, tw / 2 + 5, th / 2, 0x66000000, z - 0.01)
+        Gosu.draw_quad(x - tw / 2, y, side_left, x, y + th / 2, side_left,
+                       x, y + th / 2 + 18, COLORS[:shadow], x - tw / 2, y + 18, COLORS[:shadow], z)
+        Gosu.draw_quad(x, y + th / 2, side_right, x + tw / 2, y, side_right,
+                       x + tw / 2, y + 18, COLORS[:shadow], x, y + th / 2 + 18, COLORS[:shadow], z)
+        Gosu.draw_quad(x, y - th / 2, top_color, x + tw / 2, y, top_color,
+                       x, y + th / 2, top_color, x - tw / 2, y, top_color, z + 0.01)
         rim = progress == @game.target ? accent : Gosu::Color.new(0xff69858f)
-        [[x, y - 23, x + 45, y], [x + 45, y, x, y + 23],
-         [x, y + 23, x - 45, y], [x - 45, y, x, y - 23]].each do |line|
+        [[x, y - th / 2, x + tw / 2, y], [x + tw / 2, y, x, y + th / 2],
+         [x, y + th / 2, x - tw / 2, y], [x - tw / 2, y, x, y - th / 2]].each do |line|
           Gosu.draw_line(line[0], line[1], rim, line[2], line[3], rim, z + 0.015)
         end
         draw_diamond(x, y, 33, 15, darken(top_color, 0.88), z + 0.016)
@@ -697,7 +720,7 @@ class RaiBertWindow < Gosu::Window
 
   def tile_center(position)
     row, column = position
-    [WIDTH / 2 + (column - row / 2.0) * TILE_WIDTH, PYRAMID_TOP + row * ROW_STEP]
+    [viewport_width / 2 + (column - row / 2.0) * tile_width, pyramid_top + row * row_step]
   end
 
   def sprite(character, row, column)
@@ -738,10 +761,69 @@ class RaiBertWindow < Gosu::Window
   end
 
   def overlay(title, subtitle, color)
-    Gosu.draw_rect(170, 275, 660, 155, Gosu::Color.new(0xee_08100d), 10)
-    draw_border(170, 275, 660, 155, color, 11)
-    center_text(@title_font, title, WIDTH / 2, 298, 12, color)
-    center_text(@small_font, subtitle, WIDTH / 2, 382, 12, COLORS[:white])
+    width = [viewport_width - 40, 660].min
+    left = (viewport_width - width) / 2
+    top = (viewport_height - 155) / 2
+    Gosu.draw_rect(left, top, width, 155, Gosu::Color.new(0xee_08100d), 10)
+    draw_border(left, top, width, 155, color, 11)
+    center_text(@title_font, title, viewport_width / 2, top + 23, 12, color)
+    center_text(@small_font, subtitle, viewport_width / 2, top + 107, 12, COLORS[:white])
+  end
+
+  def viewport_width = @viewport_width || WIDTH
+  def viewport_height = @viewport_height || HEIGHT
+  def portrait? = viewport_height > viewport_width
+  def tile_width = portrait? ? viewport_width * 0.92 / GameState::ROWS : TILE_WIDTH
+  def tile_height = portrait? ? tile_width * 0.51 : TILE_HEIGHT
+  def pyramid_top = portrait? ? 190 : PYRAMID_TOP
+
+  def row_step
+    return ROW_STEP unless portrait?
+
+    [(viewport_height - pyramid_top - 80) / (GameState::ROWS - 1).to_f, tile_width * 1.42].min
+  end
+
+  def apply_browser_preferences
+    return unless Gosu.respond_to?(:browser_preferences)
+
+    settings = Gosu.browser_preferences
+    @muted = settings["muted"] if [true, false].include?(settings["muted"])
+    @selection = settings["selection"].to_i.clamp(0, CHARACTERS.length - 1) if settings.key?("selection")
+    difficulty = settings["difficulty"]&.to_sym
+    @difficulty_selection = DIFFICULTY_KEYS.index(difficulty) if DIFFICULTY_KEYS.include?(difficulty)
+    if settings["controls"].is_a?(Hash)
+      settings["controls"].each do |action, names|
+        action = action.to_sym
+        next unless MOVE_ACTIONS.include?(action) && names.is_a?(Array) && names.all? { |name| name.is_a?(String) }
+
+        keys = names.filter_map { |name| key_id(name.downcase) rescue nil }
+        next if keys.empty?
+
+        @control_names[action] = names.map(&:downcase)
+        @controls[action] = keys
+      end
+    end
+  rescue StandardError
+    nil
+  end
+
+  def save_browser_preferences
+    return unless Gosu.respond_to?(:save_browser_preferences)
+
+    Gosu.save_browser_preferences(muted: @muted, selection: @selection,
+                                  difficulty: DIFFICULTY_KEYS.fetch(@difficulty_selection),
+                                  controls: MOVE_ACTIONS.to_h { |action| [action, @control_names.fetch(action)] })
+  end
+
+  def publish_browser_state(force: false)
+    return unless @game && Gosu.respond_to?(:publish_game_state)
+
+    state = { screen: @screen, status: @game.status, score: @game.score, stage: @game.stage,
+              difficulty: @game.difficulty, paused: @paused }
+    return if !force && state == @last_published_state
+
+    @last_published_state = state
+    Gosu.publish_game_state(state)
   end
 
   def draw_border(x, y, width, height, color, z)

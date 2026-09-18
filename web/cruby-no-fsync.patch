@@ -1,0 +1,52 @@
+--- a/io.c
++++ b/io.c
+@@ -2843,8 +2843,12 @@ rb_io_fsync(VALUE io)
+ 
+     return INT2FIX(0);
+ }
+ #else
+-# define rb_io_fsync rb_f_notimplement
+-# define rb_io_sync rb_f_notimplement
++static VALUE
++rb_io_fsync(VALUE io)
++{
++    rb_notimplement();
++    UNREACHABLE;
++}
+ static VALUE
+ rb_io_set_sync(VALUE io, VALUE sync)
+ {
+--- a/process.c
++++ b/process.c
+@@ -8526,25 +8526,25 @@ rb_clock_getres(int argc, VALUE *argv, VALUE _)
+ 
+     if (SYMBOL_P(clk_id)) {
+-#ifdef CLOCK_REALTIME
++#if defined(HAVE_CLOCK_GETRES) && defined(CLOCK_REALTIME)
+         if (clk_id == RUBY_CLOCK_REALTIME) {
+             c = CLOCK_REALTIME;
+             goto getres;
+         }
+ #endif
+ 
+-#ifdef CLOCK_MONOTONIC
++#if defined(HAVE_CLOCK_GETRES) && defined(CLOCK_MONOTONIC)
+         if (clk_id == RUBY_CLOCK_MONOTONIC) {
+             c = CLOCK_MONOTONIC;
+             goto getres;
+         }
+ #endif
+ 
+-#ifdef CLOCK_PROCESS_CPUTIME_ID
++#if defined(HAVE_CLOCK_GETRES) && defined(CLOCK_PROCESS_CPUTIME_ID)
+         if (clk_id == RUBY_CLOCK_PROCESS_CPUTIME_ID) {
+             c = CLOCK_PROCESS_CPUTIME_ID;
+             goto getres;
+         }
+ #endif
+ 
+-#ifdef CLOCK_THREAD_CPUTIME_ID
++#if defined(HAVE_CLOCK_GETRES) && defined(CLOCK_THREAD_CPUTIME_ID)
+         if (clk_id == RUBY_CLOCK_THREAD_CPUTIME_ID) {
+             c = CLOCK_THREAD_CPUTIME_ID;
+             goto getres;

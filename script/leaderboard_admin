@@ -1,0 +1,31 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "aws-sdk-cloudformation"
+require "aws-sdk-dynamodb"
+
+abort "Usage: AWS_PROFILE=profile script/leaderboard_admin list|remove ENTRY_ID" unless %w[list remove].include?(ARGV[0])
+abort "Set AWS_PROFILE to an authenticated non-root administrator profile" if ENV["AWS_PROFILE"].to_s.empty?
+
+stack = Aws::CloudFormation::Client.new(region: "us-east-1").describe_stacks(stack_name: ENV.fetch("RAIBERT_STACK", "raibert-prod")).stacks.first
+table = stack.outputs.find { |output| output.output_key == "LeaderboardTableName" }&.output_value
+abort "LeaderboardTableName output is missing" unless table
+
+client = Aws::DynamoDB::Client.new(region: "us-east-1")
+key = { "pk" => "BOARD", "sk" => "CURRENT" }
+item = client.get_item(table_name: table, key: key, consistent_read: true).item || { "version" => 0, "entries" => [] }
+
+if ARGV[0] == "list"
+  item.fetch("entries", []).each { |entry| puts "%2s  %-3s  %8d  stage %02d  %-6s  %s" % [entry["rank"], entry["initials"], entry["score"], entry["stage"], entry["difficulty"], entry["id"]] }
+  exit
+end
+
+id = ARGV[1].to_s
+abort "Pass the exact entry ID to remove" if id.empty?
+entries = item.fetch("entries", [])
+abort "Entry not found" if entries.none? { |entry| entry["id"] == id }
+warn "Remove #{id} from the production leaderboard? Type REMOVE to continue:"
+abort "Cancelled" unless $stdin.gets&.strip == "REMOVE"
+remaining = entries.reject { |entry| entry["id"] == id }.each_with_index.map { |entry, index| entry.merge("rank" => index + 1) }
+client.put_item(table_name: table, item: key.merge("version" => item.fetch("version", 0).to_i + 1, "entries" => remaining), condition_expression: "version = :version", expression_attribute_values: { ":version" => item.fetch("version", 0) })
+puts "Removed #{id}."

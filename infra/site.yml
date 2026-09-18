@@ -1,5 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Static hosting for Rai*bert at raibert.lol
+Transform: AWS::Serverless-2016-10-31
+Description: Rai*bert static game and persistent worldwide leaderboard
 
 Parameters:
   HostedZoneId:
@@ -60,6 +61,152 @@ Resources:
         OriginAccessControlOriginType: s3
         SigningBehavior: always
         SigningProtocol: sigv4
+
+  LeaderboardOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Description: Signed access to the private leaderboard function URL
+        Name: !Sub ${AWS::StackName}-leaderboard
+        OriginAccessControlOriginType: lambda
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  LeaderboardTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  LeaderboardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../leaderboard/
+      Handler: handler.handler
+      Runtime: ruby4.0
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 5
+      ReservedConcurrentExecutions: 8
+      Environment:
+        Variables:
+          LEADERBOARD_TABLE: !Ref LeaderboardTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LeaderboardTable
+
+  LeaderboardFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${LeaderboardFunction}
+      RetentionInDays: 30
+
+  LeaderboardErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Leaderboard Lambda errors require investigation
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LeaderboardFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  LeaderboardThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Leaderboard Lambda throttling requires investigation
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref LeaderboardFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  LeaderboardFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      AuthType: AWS_IAM
+      InvokeMode: BUFFERED
+      TargetFunctionArn: !GetAtt LeaderboardFunction.Arn
+
+  LeaderboardFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !Ref LeaderboardFunction
+      FunctionUrlAuthType: AWS_IAM
+      Principal: cloudfront.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}
+
+  LeaderboardFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LeaderboardFunction
+      Principal: cloudfront.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}
+
+  LeaderboardWebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      DefaultAction: { Allow: {} }
+      Scope: CLOUDFRONT
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: raibert-leaderboard
+        SampledRequestsEnabled: true
+      Rules:
+        - Name: ApiRateLimit
+          Priority: 0
+          Action: { Block: {} }
+          Statement:
+            RateBasedStatement:
+              AggregateKeyType: IP
+              Limit: 100
+              EvaluationWindowSec: 300
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  FieldToMatch: { UriPath: {} }
+                  PositionalConstraint: STARTS_WITH
+                  SearchString: /api/
+                  TextTransformations:
+                    - Priority: 0
+                      Type: NONE
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: raibert-api-rate-limit
+            SampledRequestsEnabled: true
 
   SiteCertificate:
     Type: AWS::CertificateManager::Certificate
@@ -144,6 +291,7 @@ Resources:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
+        WebACLId: !GetAtt LeaderboardWebAcl.Arn
         Aliases:
           - raibert.lol
           - www.raibert.lol
@@ -173,6 +321,15 @@ Resources:
           TargetOriginId: site-bucket
           ViewerProtocolPolicy: redirect-to-https
         DefaultRootObject: index.html
+        CacheBehaviors:
+          - PathPattern: /api/*
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: 413f2c5d-022d-4e19-bc5e-790ce018f7ab
+            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+            ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+            TargetOriginId: leaderboard-function
+            ViewerProtocolPolicy: https-only
         Enabled: true
         HttpVersion: http2and3
         IPV6Enabled: true
@@ -182,6 +339,14 @@ Resources:
             OriginAccessControlId: !Ref OriginAccessControl
             S3OriginConfig:
               OriginAccessIdentity: ""
+          - CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+            DomainName: !Select [2, !Split ["/", !GetAtt LeaderboardFunctionUrl.FunctionUrl]]
+            Id: leaderboard-function
+            OriginAccessControlId: !Ref LeaderboardOriginAccessControl
         PriceClass: PriceClass_100
         ViewerCertificate:
           AcmCertificateArn: !Ref SiteCertificate
@@ -328,6 +493,9 @@ Outputs:
   DistributionDomainName:
     Description: CloudFront distribution hostname
     Value: !GetAtt SiteDistribution.DomainName
+  LeaderboardTableName:
+    Description: Retained DynamoDB leaderboard table
+    Value: !Ref LeaderboardTable
   DeployRoleArn:
     Description: Set this as the GitHub repository variable AWS_DEPLOY_ROLE_ARN
     Value: !GetAtt GitHubDeployRole.Arn
