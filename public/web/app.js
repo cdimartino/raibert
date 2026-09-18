@@ -178,8 +178,18 @@ class AudioEngine {
   fadeOutSong() {
     if (!this.song?.source) return;
     const now = this.context.currentTime;
-    this.song.gain.gain.cancelAndHoldAtTime(now);
-    this.song.gain.gain.linearRampToValueAtTime(0, now + 0.04);
+    const gain = this.song.gain.gain;
+    if (typeof gain.cancelAndHoldAtTime === "function") {
+      gain.cancelAndHoldAtTime(now);
+    } else {
+      // cancelAndHoldAtTime is absent from some Web Audio implementations.
+      // Preserve the current level before scheduling the fade so changing
+      // stages cannot abort the game loop in those browsers.
+      const currentValue = gain.value;
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(currentValue, now);
+    }
+    gain.linearRampToValueAtTime(0, now + 0.04);
     this.song.source.stop(now + 0.04);
   }
 

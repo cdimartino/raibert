@@ -8,6 +8,7 @@ const AudioEngine = runInNewContext(`${source.slice(source.indexOf("class AudioE
 const starts = [];
 const stops = [];
 const ramps = [];
+const cancellations = [];
 const engine = new AudioEngine();
 engine.context = {
   currentTime: 0,
@@ -25,9 +26,10 @@ engine.context = {
     return {
       connect() {},
       gain: {
+        value: 0.18,
         setValueAtTime() {},
         linearRampToValueAtTime(value, time) { ramps.push([value, time]); },
-        cancelAndHoldAtTime() {},
+        cancelScheduledValues(time) { cancellations.push(time); },
       },
     };
   },
@@ -38,6 +40,7 @@ assert.equal(starts.length, 1);
 assert.deepEqual(ramps.at(-1), [0.18, 0.04]);
 engine.context.currentTime = 3;
 engine.pauseSong();
+assert.deepEqual(cancellations, [3], "fades work without cancelAndHoldAtTime");
 assert.deepEqual(ramps.at(-1), [0, 3.04]);
 assert.equal(stops.at(-1), 3.04);
 engine.resume(); // Every key/touch unlocks audio, including while muted or paused.
