@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "aws-sdk-dynamodb"
+require "aws-sdk-dynamodb" unless defined?(Aws::DynamoDB)
 require "json"
 require "securerandom"
 require "time"
@@ -39,12 +39,12 @@ class LeaderboardHandler
   def board
     item = @client.get_item(table_name: @table, key: BOARD_KEY, consistent_read: true).item
     entries = item&.fetch("entries", []) || []
-    Leaderboard.response(entries).merge(version: item&.fetch("version", 0) || 0)
+    Leaderboard.response(entries).merge("version" => item&.fetch("version", 0) || 0)
   end
 
   def submit(submission)
     existing = @client.get_item(table_name: @table, key: { "pk" => "RUN", "sk" => submission.fetch("runId") }, consistent_read: true).item
-    return response(200, board.merge(duplicate: true)) if existing
+    return response(200, board.merge("duplicate" => true)) if existing
 
     4.times do
       current = @client.get_item(table_name: @table, key: BOARD_KEY, consistent_read: true).item || { "version" => 0, "entries" => [] }
@@ -60,10 +60,10 @@ class LeaderboardHandler
           { put: { table_name: @table, item: { "pk" => "RUN", "sk" => submission.fetch("runId"), "expiresAt" => Time.now.to_i + 86_400 },
                    condition_expression: "attribute_not_exists(pk)" } }
         ])
-        return response(200, Leaderboard.response(ranked, submission: entry).merge(version: version, rank: rank, duplicate: false, entry: rank ? entry : nil))
+        return response(200, Leaderboard.response(ranked, submission: entry).merge("version" => version, "rank" => rank, "duplicate" => false, "entry" => rank ? entry : nil))
       rescue Aws::DynamoDB::Errors::TransactionCanceledException
         duplicate = @client.get_item(table_name: @table, key: { "pk" => "RUN", "sk" => submission.fetch("runId") }, consistent_read: true).item
-        return response(200, board.merge(duplicate: true)) if duplicate
+        return response(200, board.merge("duplicate" => true)) if duplicate
 
         next
       end
