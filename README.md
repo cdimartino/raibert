@@ -71,7 +71,7 @@ Open `http://localhost:9292`. See [Web runtime internals](docs/web-runtime.md) b
 
 ## Architecture
 
-The hosted game is a static Canvas/Web Audio client running Ruby 4.0 in WebAssembly. CloudFront serves the private S3 origin and signs requests to a private Ruby Lambda Function URL. Lambda validates and transactionally updates a capped DynamoDB board. AWS WAF, reserved concurrency, structured logs, and alarms provide operational limits without putting an administrative API on the public internet.
+The hosted game is a static Canvas/Web Audio client running Ruby 4.0 in WebAssembly. CloudFront serves the private S3 origin and signs requests to a private Ruby Lambda Function URL. Lambda validates and transactionally updates a capped DynamoDB board. AWS WAF, configurable reserved concurrency, structured logs, and alarms provide operational limits without putting an administrative API on the public internet.
 
 See [Deployment](docs/deployment.md) for AWS operations and [Contributing](CONTRIBUTING.md) for the development workflow.
 

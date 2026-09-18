@@ -73,6 +73,14 @@ else
   fi
 fi
 
+parameter_overrides=(
+  "HostedZoneId=$hosted_zone_id"
+  "GitHubRepository=cdimartino@191587/raibert@1373118135"
+)
+if [ -n "$oidc_provider_arn" ]; then
+  parameter_overrides+=("ExistingGitHubOidcProviderArn=$oidc_provider_arn")
+fi
+
 sam deploy \
   --profile "$AWS_PROFILE" \
   --region "$AWS_REGION" \
@@ -80,11 +88,8 @@ sam deploy \
   --template-file "$ROOT/infra/site.yml" \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
   --resolve-s3 \
-  --no-fail-on-empty-changes \
-  --parameter-overrides \
-    HostedZoneId="$hosted_zone_id" \
-    GitHubRepository="cdimartino@191587/raibert@1373118135" \
-    ExistingGitHubOidcProviderArn="$oidc_provider_arn"
+  --no-fail-on-empty-changeset \
+  --parameter-overrides "${parameter_overrides[@]}"
 
 site_dir="$(mktemp -d)"
 trap 'rm -rf "$site_dir"' EXIT

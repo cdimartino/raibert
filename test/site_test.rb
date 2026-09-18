@@ -16,7 +16,8 @@ infrastructure = File.read(File.join(ROOT, "infra/site.yml"))
 assert(infrastructure.include?("OriginAccessControlOriginType: lambda") && infrastructure.include?("AuthType: AWS_IAM"), "Lambda origin is private and signed by CloudFront")
 assert(infrastructure.include?("Scope: CLOUDFRONT") && infrastructure.include?("RateBasedStatement:"), "CloudFront WAF rate limits the API")
 assert(infrastructure.include?("PointInTimeRecoveryEnabled: true") && infrastructure.scan("DeletionPolicy: Retain").length >= 3, "stateful resources are protected and retained")
-assert(infrastructure.include?("ReservedConcurrentExecutions: 8") && infrastructure.include?("RetentionInDays: 30"), "Lambda concurrency and logs are bounded")
+assert(infrastructure.include?("LeaderboardReservedConcurrency:") && infrastructure.include?("ReserveLeaderboardConcurrency") && infrastructure.include?("ReservedConcurrentExecutions: !If"), "Lambda reserved concurrency can be enabled when the account quota permits")
+assert(infrastructure.include?("RetentionInDays: 30"), "Lambda logs have bounded retention")
 assert(infrastructure.include?("DynamoDBCrudPolicy:") && !infrastructure.include?("Action: \"*\""), "leaderboard role is scoped to its table")
 
 Dir.mktmpdir("raibert-site-") do |destination|

@@ -20,4 +20,21 @@ assert(ranked.each_cons(2).all? { |left, right| ([-left["score"], left["achieved
 response = Leaderboard.response([entries.first], submission: entries.first)
 assert(response["highScore"] == entries.first["score"] && response["submission"] == entries.first, "response includes score and submission")
 assert(Leaderboard.response([]) == { "version" => 1, "highScore" => 0, "entries" => [] }, "empty response")
+
+module Aws
+  module DynamoDB
+    class Client; end
+    module Errors
+      class ServiceError < StandardError; end
+      class TransactionCanceledException < ServiceError; end
+    end
+  end
+end
+require_relative "../leaderboard/handler"
+fake_result = Struct.new(:item)
+fake_client = Object.new
+fake_client.define_singleton_method(:get_item) { |**| fake_result.new(nil) }
+raw_body = LeaderboardHandler.new(table: "leaderboard-test", client: fake_client).call(event: { "requestContext" => { "http" => { "method" => "GET" } } })[:body]
+assert(raw_body.scan(/"version":/).length == 1, "serialized board has one version key")
+assert(JSON.parse(raw_body) == { "version" => 0, "highScore" => 0, "entries" => [] }, "handler returns the empty board revision")
 puts "Leaderboard domain check passed"
