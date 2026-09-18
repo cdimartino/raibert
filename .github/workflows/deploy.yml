@@ -56,7 +56,10 @@ jobs:
           payload = token.split(".")[1]
           payload += "=" * (-len(payload) % 4)
           claims = json.loads(base64.urlsafe_b64decode(payload))
-          public_claims = {key: claims.get(key) for key in ("aud", "sub", "repository", "ref")}
+          public_claims = {
+              key: claims.get(key)
+              for key in ("iss", "aud", "sub", "repository", "ref", "enterprise", "enterprise_id")
+          }
           print(json.dumps(public_claims, sort_keys=True))
           if claims.get("aud") != "sts.amazonaws.com" or claims.get("sub") != expected:
               raise SystemExit("Unexpected GitHub OIDC identity")
