@@ -124,7 +124,7 @@ aws login --profile raibert-admin --remote
 AWS_PROFILE=raibert-admin script/bootstrap_aws
 ```
 
-The bootstrap creates or updates the `raibert-prod` stack in `us-east-1`, packages the committed browser build, deploys it, and prints the deployment role ARN. Set that ARN as the non-secret `AWS_DEPLOY_ROLE_ARN` repository variable in GitHub. Future pushes to `main` run the browser tests and deploy through short-lived GitHub OIDC credentials; no AWS access key is stored in GitHub. The role trust uses GitHub's immutable owner and repository IDs as well as the `main` ref, so a renamed or transferred repository cannot inherit production access.
+The bootstrap creates or updates the `raibert-prod` stack in `us-east-1`, packages the committed browser build, deploys it, and prints the deployment role ARN. Set that ARN as the non-secret `AWS_DEPLOY_ROLE_ARN` repository variable in GitHub. Future pushes to `main` run the complete CI suite first. The deployment workflow runs only after CI succeeds, then deploys through short-lived GitHub OIDC credentials; no AWS access key is stored in GitHub. The role trust uses GitHub's immutable owner and repository IDs as well as the `main` ref, so a renamed or transferred repository cannot inherit production access.
 
 `script/package_site DESTINATION` assembles `public/` and `assets/` into the S3 layout and precompresses the large Wasm artifact. `script/deploy_site DESTINATION` repeats only the content deployment with an authenticated AWS profile. The infrastructure deliberately reuses an existing hosted zone and does not register the domain or create another zone. CloudFormation retains the versioned site bucket if the stack is deleted; old object versions expire after 30 days.
 
@@ -187,23 +187,20 @@ Difficulty and character are normally selected in the game; `--difficulty` can p
 
 ## Test
 
-After installing dependencies, run the rules smoke test:
-
-The full smoke test requires the `desktop` bundle group. A browser-only install made with `without desktop` can run `test/web_shim_test.rb` and `test/rack_test.rb`; unset that Bundler setting and install Gosu before running `test/smoke_test.rb`.
+Install the browser test dependency and Playwright's Chromium build once, then run the complete local suite:
 
 ```sh
 mise exec -- bundle check
-mise exec -- ruby test/collision_test.rb
-mise exec -- ruby test/gameplay_collision_test.rb
-mise exec -- bundle exec ruby test/smoke_test.rb
-mise exec -- ruby test/web_shim_test.rb
-mise exec -- bundle exec ruby test/rack_test.rb
-node test/audio_test.mjs
-mise exec -- ruby test/site_test.rb
+mise exec -- npm ci --prefix web
+mise exec -- npx --prefix web playwright install chromium
+mise exec -- script/test
 ```
 
-The smoke test covers campaign progression, CLI validation, difficulty scaling, enemies, touchdown timing, rescues, powerup effects and expiry, life limits, Game Over reset, and Level 20 victory.
-The focused collision test covers stationary and in-flight contacts for every powerup and enemy type, enemy spawns, frozen overlaps, rescue arrivals, and expired movement paths. The gameplay collision test drives complete headless campaigns through the real window update loop on every difficulty while checking state invariants on every frame.
+`test/unit_coverage_test.rb` combines the deterministic rules and collision unit suites and fails unless every executable line in `GameState` is covered. It writes the machine-readable result to `coverage/unit.json`. The broader suite covers CLI and window behavior, the browser Gosu shim, Rack routing, static packaging, Web Audio races, and complete headless campaigns on every difficulty.
+
+Playwright starts the real Rack application, downloads and boots the committed Ruby/Wasm runtime in Chromium, and exercises keyboard and touch journeys at desktop and mobile sizes. Failed CI journeys retain traces, screenshots, and video as a GitHub Actions artifact.
+
+GitHub Actions runs the Ruby and browser jobs for every pull request and every push to `main`. Production deployment is chained to a successful `main` CI run; a failing coverage, integration, campaign, audio, or end-to-end check prevents release.
 
 ## Project layout
 
@@ -224,9 +221,12 @@ assets/sounds/          Distinct soft gameplay cues
 script/build_audio.py   Reproducible ambient score and sound effects
 assets/rai*/            Character sprite sheets
 test/smoke_test.rb      Runnable gameplay rules check
+test/unit_coverage_test.rb  Enforced 100% GameState line-coverage gate
 test/site_test.rb       Static deployment package check
 test/collision_test.rb  Focused moving-object collision regression check
 test/gameplay_collision_test.rb  Full headless campaign and invariant check
+web/e2e/                Playwright desktop and mobile browser journeys
+script/test             Complete local test-suite entry point
 ```
 
 ## Credits and licensing

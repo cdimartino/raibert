@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruby:
+    name: Ruby unit & integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Gosu system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libfontconfig1-dev libgl1-mesa-dev libmpg123-dev libopenal-dev \
+            libsdl2-dev libsdl2-ttf-dev libsndfile1-dev
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 4.0.7
+          bundler-cache: true
+
+      - name: Enforce 100% GameState unit coverage
+        run: bundle exec ruby test/unit_coverage_test.rb
+
+      - name: Run browser shim and HTTP integration tests
+        run: |
+          ruby test/web_shim_test.rb
+          bundle exec ruby test/rack_test.rb
+          bundle exec ruby test/site_test.rb
+
+      - name: Run deterministic full-campaign simulation
+        run: bundle exec ruby test/gameplay_collision_test.rb
+
+      - name: Upload unit coverage report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: unit-coverage
+          path: coverage/unit.json
+          if-no-files-found: error
+
+  browser:
+    name: Browser end-to-end
+    runs-on: ubuntu-latest
+    env:
+      BUNDLE_WITHOUT: desktop
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 4.0.7
+          bundler-cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.20.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install browser test dependencies
+        run: |
+          npm ci --prefix web
+          npx --prefix web playwright install --with-deps chromium
+
+      - name: Run Web Audio unit tests
+        run: npm --prefix web test
+
+      - name: Run Chromium end-to-end tests
+        run: npm --prefix web run test:e2e
+
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report
+            web/test-results
+          if-no-files-found: ignore
+          retention-days: 14

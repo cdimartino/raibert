@@ -3,6 +3,11 @@
 /build/
 /node_modules/
 /web/node_modules/
+/coverage/
+/playwright-report/
+/test-results/
+/web/playwright-report/
+/web/test-results/
 /rubies/
 .DS_Store
 /raibert.tar.gz

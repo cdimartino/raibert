@@ -1,9 +1,16 @@
 {
   "name": "raibert-web-runtime",
   "private": true,
+  "scripts": {
+    "test": "node ../test/audio_test.mjs",
+    "test:e2e": "playwright test"
+  },
   "dependencies": {
     "@ruby/4.0-wasm-wasi": "2.10.1",
     "@ruby/wasm-wasi": "2.10.1",
     "esbuild": "0.25.10"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.1"
   }
 }

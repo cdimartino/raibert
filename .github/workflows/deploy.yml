@@ -1,7 +1,11 @@
 name: Deploy raibert.lol
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
     branches:
       - main
   workflow_dispatch:
@@ -21,22 +25,19 @@ env:
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.7
           bundler-cache: true
-
-      - name: Test browser build
-        run: |
-          bundle exec ruby test/rack_test.rb
-          ruby test/web_shim_test.rb
-          ruby test/site_test.rb
 
       - name: Package static site
         run: script/package_site "$RUNNER_TEMP/raibert-site"
