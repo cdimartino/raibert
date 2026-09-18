@@ -1,10 +1,22 @@
 --- a/lib/ruby_wasm/build/product/crossruby.rb
 +++ b/lib/ruby_wasm/build/product/crossruby.rb
-@@ -46,3 +46,7 @@ module RubyWasm
-       objdir = product_build_dir crossruby
+@@ -47,4 +47,8 @@ module RubyWasm
        executor.mkdir_p objdir
        do_extconf executor, crossruby
 +      File.open(File.join(objdir, "Makefile"), "a") do |makefile|
 +        makefile.puts "INCFLAGS += -I#{crossruby.build_dir}/.ext/include/wasm32-wasi" \
 +                      " -I#{crossruby.build_dir}/.ext/include -I#{crossruby.source.src_dir}"
 +      end
+
+       executor.system "make", "-C", objdir, *make_args(crossruby), "clean"
+--- a/lib/ruby_wasm/build/executor.rb
++++ b/lib/ruby_wasm/build/executor.rb
+@@ -8,7 +8,7 @@ module RubyWasm
+       __skip__ =
+         begin
+           require "etc"
+-          @process_count = process_count || Etc.nprocessors
++          @process_count = Integer(ENV.fetch("RUBY_WASM_JOBS", process_count || Etc.nprocessors))
+         rescue LoadError
+           @process_count = process_count || 1
+         end

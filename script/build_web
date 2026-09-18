@@ -15,6 +15,7 @@ mkdir -p "$WORK" "$PUBLIC"
 
 docker run --rm --platform linux/amd64 \
   -e BASE_CACHE_KEY="$BASE_CACHE_KEY" \
+  -e RUBY_WASM_JOBS="${RUBY_WASM_JOBS:-2}" \
   -v "$ROOT:/src" -v "$WORK:/work" -w /work "$RUBY_IMAGE" bash -lc '
     set -euo pipefail
     cp /src/web/Gemfile /src/web/Gemfile.lock /work/
@@ -24,14 +25,16 @@ docker run --rm --platform linux/amd64 \
     RUBY_WASM_DIR=$(bundle show ruby_wasm)
     bundle pristine ruby_wasm >/dev/null
     patch -d "$RUBY_WASM_DIR" -p1 < /src/web/ruby_wasm-local-headers.patch
-    BASE_SIGNATURE=$(printf "%s\n%s\n%s\n" "$BASE_CACHE_KEY" \
+    BASE_SIGNATURE=$(printf "%s\n%s\n%s\n%s\n" "$BASE_CACHE_KEY" \
       "$(sha256sum /src/web/Gemfile.lock)" \
-      "$(sha256sum /src/web/ruby_wasm-local-headers.patch)" | sha256sum | cut -d " " -f 1)
+      "$(sha256sum /src/web/ruby_wasm-local-headers.patch)" \
+      "$(sha256sum /src/web/cruby-no-fsync.patch)" | sha256sum | cut -d " " -f 1)
     if [ ! -f /work/ruby-base.wasm ] || [ ! -f /work/ruby-base.signature ] || [ "$(cat /work/ruby-base.signature)" != "$BASE_SIGNATURE" ]; then
       rm -rf /work/build /work/rubies /work/ruby-4.0.7
       curl -fsSL https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz -o /work/ruby-4.0.7.tar.gz
       echo "'"$RUBY_TARBALL_SHA256"'  /work/ruby-4.0.7.tar.gz" | sha256sum -c -
       tar -xzf /work/ruby-4.0.7.tar.gz -C /work
+      patch -d /work/ruby-4.0.7 -p1 < /src/web/cruby-no-fsync.patch
       bundle exec rbwasm build --ruby-version /work/ruby-4.0.7 \
         --target wasm32-unknown-wasip1 --build-profile full --stdlib \
         -o /work/ruby-base.wasm

@@ -1,58 +1,56 @@
 # Rai*bert
 
-Ship the pipeline, one hop at a time.
+Hop the pyramid. Fix the build. Ship the pipeline.
 
-Rai*bert is a Q*bert-inspired Ruby arcade game. Turn every failing build tile into a passing build while dodging bugs, exceptions, and regressions across a 20-level campaign.
+**[▶ Play Rai*bert](https://raibert.lol/)**
 
-![Rai*bert stage completion](docs/screenshots/stage-clear.png)
+[![CI](https://github.com/cdimartino/raibert/actions/workflows/ci.yml/badge.svg)](https://github.com/cdimartino/raibert/actions/workflows/ci.yml)
+[![Deploy](https://github.com/cdimartino/raibert/actions/workflows/deploy.yml/badge.svg)](https://github.com/cdimartino/raibert/actions/workflows/deploy.yml)
+[![Ruby 4.0](https://img.shields.io/badge/Ruby-4.0-CC342D?logo=ruby)](https://www.ruby-lang.org/)
+[![MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-![Rai*bert mid-game action](docs/screenshots/mid-game-action.png)
+![Rai*bert full-screen gameplay](docs/screenshots/desktop-gameplay.png)
+
+Rai*bert is a fast Q*bert-inspired arcade game built in Ruby. Turn every failing build tile green while dodging bugs, exceptions, and regressions through a 20-stage software-delivery odyssey.
 
 ## Features
 
-- 20 stages, from Build to Ship, with rising tile, enemy, and timing pressure.
-- Easy, Normal, and Hard modes with different lives, enemy density, enemy speed, spawn rate, and powerup timing.
-- Three enemy behaviors: descending bugs, chasing exceptions, and regressions that undo tile progress.
-- Five falling, limited-time powerups: enemy freeze, enemy clear, extra life, shield, and tile repair.
-- Two selectable Rai characters with directional hops, themed idle loops, and death/respawn animation.
-- Layered stage presentation with illustrated worlds, atmospheric bands, data lanes, particles, palettes, and quiet ambient music with a different phrase for each level.
-- Soft, distinct cues for takeoff, touchdown, tile completion, each powerup, rescue, and success or failure; music sits behind the game sounds.
-- One-use rescue platforms on both edges of each stage.
-- No checkpoints: by default, Game Over restarts at Level 1, while clearing Level 20 reaches the victory screen.
+- A complete 20-stage campaign across Easy, Normal, and Hard.
+- Two playable Rais, three enemy behaviors, five powerups, rescue platforms, and unique level themes.
+- True full-screen play on desktop and mobile with keyboard or gesture input.
+- An optional movable touch D-pad that remembers where you put it.
+- A shared worldwide Top 15 with arcade-style three-letter initials.
+- The same deterministic Ruby rules on native Gosu and Ruby/Wasm in the browser.
 
-## Gameplay
+## How to play
 
-Land on every tile enough times to complete the stage. Level 1 needs one landing per tile, Levels 2–4 need two, and Levels 5–20 need three. Tile progress changes only after Rai lands.
+Land on every tile until the board is green. Avoid enemies, collect falling powerups, and use each side rescue once. Later stages need multiple landings per tile. There are no checkpoints: a failed build starts a new run.
 
-Enemy pressure increases throughout the campaign. Bugs descend the pyramid, exceptions chase Rai, and regressions remove progress from tiles they touch. Clearing a stage restores one lost life up to the configured starting amount.
+### Desktop
 
-### Powerups
-
-| Drop | Effect |
+| Action | Keys |
 | --- | --- |
-| `DBG` | Freezes enemies for four seconds. |
-| `GC` | Clears every active enemy. |
-| `1UP` | Adds one life, up to one above the configured starting amount. |
-| `SH` | Grants five seconds of collision protection. |
-| `FX` | Repairs three unfinished tiles by one step. |
+| Hop diagonally | `Q` `E` `A` `D` |
+| Select character / difficulty | Arrow keys |
+| Start | Enter |
+| Pause / back | Escape |
+| Options / mute / leaderboard | `O` / `M` / `L` |
 
-Drops enter at the summit, fall one row at a time, and disappear after leaving the board. They fall faster on later levels and harder difficulties, so collecting one means changing route before time runs out.
+### Mobile
 
-## Requirements
+Swipe diagonally to hop. On the selection screen, swipe horizontally for a character, vertically for difficulty, and tap to start. Tap during play to pause; hold on selection to open the menu. A compact draggable D-pad is available from the menu and is hidden by default.
 
-The included setup targets macOS and uses:
+## Worldwide leaderboard
 
-- [Homebrew](https://brew.sh/)
-- [mise](https://mise.jdx.dev/)
-- Ruby 4.0.7
-- SDL2
-- Xcode Command Line Tools or another working macOS C toolchain
+Every completed browser run can compete on one worldwide Top 15. The board ranks score first, then earliest server acceptance. Enter exactly three letters after a qualifying game over or victory. The board is intentionally casual and client-authoritative: validation, throttling, moderation, and idempotency reduce abuse, but cannot cryptographically prove a browser-generated score.
 
-Gosu and the remaining Ruby dependencies are declared in `Gemfile` and locked in `Gemfile.lock`.
+![Worldwide Top 15](docs/screenshots/leaderboard.png)
 
-The browser build is a stateless Rack application. Its compiled Ruby 4.0.7 WebAssembly runtime is committed, so hosting it does not require Node.js or Docker. Installing Puma and nio4r may still require the platform's standard Ruby C build tools.
+<p align="center"><img src="docs/screenshots/mobile-gameplay.png" alt="Rai*bert portrait mobile gameplay" width="320"> <img src="docs/screenshots/mobile-controls.png" alt="Optional floating mobile controls" width="320"></p>
 
-## Install and run on macOS
+## Run locally
+
+Ruby 4.0.7 is pinned with mise. Native play additionally needs SDL2 and Gosu.
 
 ```sh
 brew install mise sdl2
@@ -61,17 +59,7 @@ mise exec -- bundle install
 mise exec -- bundle exec ruby game.rb
 ```
 
-If macOS asks for the Xcode license while compiling a native dependency, review and accept it in Terminal before retrying `bundle install`.
-
-After the first setup, launch with:
-
-```sh
-mise exec -- bundle exec ruby game.rb
-```
-
-## Run in a browser
-
-Install the locked server gems and start Puma:
+For the browser build:
 
 ```sh
 mise exec -- bundle config set --local without desktop
@@ -79,115 +67,15 @@ mise exec -- bundle install
 mise exec -- bundle exec puma
 ```
 
-Skip the `bundle config` line on a machine that also runs the native desktop game.
+Open `http://localhost:9292`. See [Web runtime internals](docs/web-runtime.md) before rebuilding the committed Wasm bundle.
 
-Open `http://localhost:9292`. Set `PORT` when the hosting platform assigns one:
+## Architecture
 
-```sh
-PORT=8080 mise exec -- bundle exec puma
-```
+The hosted game is a static Canvas/Web Audio client running Ruby 4.0 in WebAssembly. CloudFront serves the private S3 origin and signs requests to a private Ruby Lambda Function URL. Lambda validates and transactionally updates a capped DynamoDB board. AWS WAF, reserved concurrency, structured logs, and alarms provide operational limits without putting an administrative API on the public internet.
 
-On a host that already provides Ruby 4.0.7 and Bundler, omit the `mise exec --` prefix. Deploy the repository root, including `public/web` and `assets`, run `bundle exec puma`, and terminate HTTPS at the platform or reverse proxy. The shell uses absolute `/web` and `/assets` URLs, so mount it at the origin root rather than under a path prefix.
-
-The browser runs the same Ruby game and rules locally through WebAssembly. Rack only serves the application and existing assets; it stores no sessions or game state. Reloading starts a new run.
-
-The bounded native Gosu/Emscripten gate was rejected because CRuby 4.0.7's Emscripten coroutine backend requires Asyncify. The shipped build therefore uses the supported WASI runtime with the small Canvas/Web Audio Gosu compatibility layer in `web/gosu.rb`.
-
-Keyboard controls match the desktop game. The page also provides touch buttons for the four contextual directions, start/confirm, options, pause/back, and mute. Browser audio starts after the first keyboard or touch action, as required by browser autoplay policies.
-
-The first visit downloads the Ruby/WebAssembly runtime, artwork, and initial audio, so it is substantially larger than a typical static page; content-hashed runtime files are cached after that load. Browser mode requires WebAssembly, ES modules, Canvas 2D, and Web Audio. Desktop CLI overrides and `--demo` are not available in the browser.
-
-### Rebuild the web runtime
-
-The committed runtime is ready to host. Rebuild after changing `game.rb`, `lib/`, `config/controls.json`, the browser shim/boot code, or the ruby.wasm loader:
-
-```sh
-script/build_web
-```
-
-The build requires a running Docker daemon. It compiles the pinned CRuby 4.0.7 WASI runtime, packages only the Ruby source and configuration into WebAssembly, bundles the pinned ruby.wasm browser loader, and writes content-hashed artifacts plus license notices under `public/web`. Images and audio remain under `/assets` and are not duplicated in the Wasm binary.
-
-Docker must support `linux/amd64` containers. The script reuses the ignored `build/web-runtime` cache and invalidates its compiled Ruby base when build inputs change. Changes limited to `public/index.html`, `public/web/app.css`, or `public/web/app.js` are served directly and do not require a Wasm rebuild.
-
-### Regenerate the audio
-
-Run `python3 script/build_audio.py` to regenerate the original 20 ambient loops and 15 effects using Python's standard library. The score uses slow D-major harmony, warm pads, and sparse mallet notes at 60 BPM, with no percussion. WAVs are checked in and shared by desktop and browser; audio generation is not needed to play. The mix lives in `game.rb` (music `0.18`, effects `0.55`); individual cue envelopes and levels live in the generator.
-
-## Deploy raibert.lol
-
-Production is a static deployment to a private S3 bucket behind CloudFront. CloudFormation owns the bucket, CDN, certificate, DNS aliases, `www` redirect, and least-privilege GitHub deployment role. The Rack server remains the local browser-development path.
-
-Authenticate to the AWS account containing the public `raibert.lol` hosted zone with a non-root identity. The bootstrap script refuses to run as the AWS account root user and refuses to deploy when the registrar nameservers do not match the hosted zone.
-
-```sh
-aws login --profile raibert-admin --remote
-AWS_PROFILE=raibert-admin script/bootstrap_aws
-```
-
-The bootstrap creates or updates the `raibert-prod` stack in `us-east-1`, packages the committed browser build, deploys it, and prints the deployment role ARN. Set that ARN as the non-secret `AWS_DEPLOY_ROLE_ARN` repository variable in GitHub. Future pushes to `main` run the complete CI suite first. The deployment workflow runs only after CI succeeds, then deploys through short-lived GitHub OIDC credentials; no AWS access key is stored in GitHub. The role trust uses GitHub's immutable owner and repository IDs as well as the `main` ref, so a renamed or transferred repository cannot inherit production access.
-
-`script/package_site DESTINATION` assembles `public/` and `assets/` into the S3 layout and precompresses the large Wasm artifact. `script/deploy_site DESTINATION` repeats only the content deployment with an authenticated AWS profile. The infrastructure deliberately reuses an existing hosted zone and does not register the domain or create another zone. CloudFormation retains the versioned site bucket if the stack is deleted; old object versions expire after 30 days.
-
-## Command-line options
-
-These options apply to the native desktop launch only; the browser always opens the character and difficulty selection screen at Level 1.
-
-Launching without flags is unchanged: choose a character and difficulty in the game, then begin at Level 1 with that difficulty's normal life count.
-
-Use these optional overrides for testing and demos:
-
-```sh
-# Start at Level 12
-mise exec -- bundle exec ruby game.rb --level 12
-
-# Start with six lives
-mise exec -- bundle exec ruby game.rb --lives 6
-
-# Combine overrides
-mise exec -- bundle exec ruby game.rb --level 12 --lives 6 --difficulty hard
-
-# Autoplay the same configured run
-mise exec -- bundle exec ruby game.rb --demo --level 12 --lives 6 --difficulty hard
-```
-
-`--level` accepts `1`–`20`, `--lives` accepts `1`–`99`, and `--difficulty` accepts `easy`, `normal`, or `hard`. Invalid values are rejected instead of being silently adjusted. Run `mise exec -- bundle exec ruby game.rb --help` for the full usage summary.
-
-The overrides are launch settings, not checkpoints: after Game Over, the game restarts at the configured start level with the configured starting lives. Demo mode makes normal directional moves through the real tick, enemy, collision, tile, and powerup rules; it does not mutate progress directly and stops on the visible victory screen.
-
-## Controls
-
-| Action | Default keys |
-| --- | --- |
-| Hop up-left | `Q` or `W` |
-| Hop up-right | `E` or `D` |
-| Hop down-left | `Z` or `A` |
-| Hop down-right | `C` or `S` |
-| Choose character | Left / Right |
-| Choose difficulty | Up / Down |
-| Start or restart | Enter |
-| Pause or return to character select | Escape |
-| Mute music and effects | `M` |
-
-## Configuration
-
-Bindings live in `config/controls.json`. Movement defaults to Q/E/A/D with one key per direction. Press O before starting or while paused to replace a movement key for the current session. The game rejects unsupported, reserved, and duplicate bindings.
-
-```json
-{
-  "up_left": ["q", "w"],
-  "up_right": ["e", "d"],
-  "down_left": ["z", "a"],
-  "down_right": ["c", "s"]
-}
-```
-
-The desktop app reads this file at launch. The browser copy is embedded in the Wasm artifact, so rerun `script/build_web` after changing bindings; semantic touch buttons continue to follow the configured actions.
-
-Difficulty and character are normally selected in the game; `--difficulty` can preset the difficulty for a test or demo run. No save file or checkpoint configuration is used.
+See [Deployment](docs/deployment.md) for AWS operations and [Contributing](CONTRIBUTING.md) for the development workflow.
 
 ## Test
-
-Install the browser test dependency and Playwright's Chromium build once, then run the complete local suite:
 
 ```sh
 mise exec -- bundle check
@@ -196,43 +84,8 @@ mise exec -- npx --prefix web playwright install chromium
 mise exec -- script/test
 ```
 
-`test/unit_coverage_test.rb` combines the deterministic rules and collision unit suites and fails unless every executable line in `GameState` is covered. It writes the machine-readable result to `coverage/unit.json`. The broader suite covers CLI and window behavior, the browser Gosu shim, Rack routing, static packaging, Web Audio races, and complete headless campaigns on every difficulty.
+CI enforces 100% executable-line coverage for `GameState` and the leaderboard domain, runs deterministic campaigns, browser-shim and infrastructure checks, and executes Playwright on desktop and mobile viewports. Production deployment runs only after `main` passes CI.
 
-Playwright starts the real Rack application, downloads and boots the committed Ruby/Wasm runtime in Chromium, and exercises keyboard and touch journeys at desktop and mobile sizes. Failed CI journeys retain traces, screenshots, and video as a GitHub Actions artifact.
+## Credits and license
 
-GitHub Actions runs the Ruby and browser jobs for every pull request and every push to `main`. Production deployment is chained to a successful `main` CI run; a failing coverage, integration, campaign, audio, or end-to-end check prevents release.
-
-## Project layout
-
-```text
-game.rb                 Gosu window, input, rendering, animation, and audio
-lib/game_state.rb       Deterministic game rules and balance
-lib/demo_window.rb      Real-input autoplay driver used by --demo
-config/controls.json    Customizable key bindings
-config.ru               Rack entry point for the browser build
-web/                    Browser Gosu compatibility layer and Wasm boot code
-public/                  Browser shell and compiled WebAssembly runtime
-infra/site.yml           AWS production infrastructure
-script/build_web         Reproducible Docker-based web runtime build
-script/bootstrap_aws     Guarded infrastructure bootstrap and initial deploy
-assets/art/             Stage, enemy, rescue, and powerup artwork
-assets/music/           One soundtrack per level
-assets/sounds/          Distinct soft gameplay cues
-script/build_audio.py   Reproducible ambient score and sound effects
-assets/rai*/            Character sprite sheets
-test/smoke_test.rb      Runnable gameplay rules check
-test/unit_coverage_test.rb  Enforced 100% GameState line-coverage gate
-test/site_test.rb       Static deployment package check
-test/collision_test.rb  Focused moving-object collision regression check
-test/gameplay_collision_test.rb  Full headless campaign and invariant check
-web/e2e/                Playwright desktop and mobile browser journeys
-script/test             Complete local test-suite entry point
-```
-
-## Credits and licensing
-
-Rai character artwork is derived from the supplied `rai-pets-v2.zip`. Stage, enemy, rescue, and powerup art was generated for this game; generation prompts are preserved in `assets/art/PROMPTS.md`. [Gosu](https://www.libgosu.org/) is MIT-licensed.
-
-The browser runtime includes CRuby and ruby.wasm. Their license and notice files are distributed with the generated files under `public/web/licenses`.
-
-Rai*bert is released under the [MIT License](LICENSE).
+Rai character artwork is derived from `rai-pets-v2.zip`. Game art prompts are preserved in `assets/art/PROMPTS.md`. Rai*bert uses [Gosu](https://www.libgosu.org/), CRuby, and ruby.wasm and is released under the [MIT License](LICENSE).

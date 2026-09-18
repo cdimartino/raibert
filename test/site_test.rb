@@ -12,6 +12,13 @@ def assert(condition, message)
   raise "Site check failed: #{message}" unless condition
 end
 
+infrastructure = File.read(File.join(ROOT, "infra/site.yml"))
+assert(infrastructure.include?("OriginAccessControlOriginType: lambda") && infrastructure.include?("AuthType: AWS_IAM"), "Lambda origin is private and signed by CloudFront")
+assert(infrastructure.include?("Scope: CLOUDFRONT") && infrastructure.include?("RateBasedStatement:"), "CloudFront WAF rate limits the API")
+assert(infrastructure.include?("PointInTimeRecoveryEnabled: true") && infrastructure.scan("DeletionPolicy: Retain").length >= 3, "stateful resources are protected and retained")
+assert(infrastructure.include?("ReservedConcurrentExecutions: 8") && infrastructure.include?("RetentionInDays: 30"), "Lambda concurrency and logs are bounded")
+assert(infrastructure.include?("DynamoDBCrudPolicy:") && !infrastructure.include?("Action: \"*\""), "leaderboard role is scoped to its table")
+
 Dir.mktmpdir("raibert-site-") do |destination|
   output, status = Open3.capture2e(File.join(ROOT, "script/package_site"), destination)
   assert(status.success?, "package script failed: #{output}")
