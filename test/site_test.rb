@@ -24,7 +24,7 @@ Dir.mktmpdir("raibert-site-") do |destination|
   output, status = Open3.capture2e(File.join(ROOT, "script/package_site"), destination)
   assert(status.success?, "package script failed: #{output}")
 
-  %w[index.html 404.html web/app.js web/app.css web/runtime.json assets/art/build.png assets/music/build.wav].each do |path|
+  %w[index.html 404.html web/app.js web/input.js web/app.css web/runtime.json assets/art/build.png assets/music/build.wav].each do |path|
     assert(File.file?(File.join(destination, path)), "package contains #{path}")
   end
 
