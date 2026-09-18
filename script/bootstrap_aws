@@ -51,12 +51,24 @@ if ! dig +short SOA "$DOMAIN" "@$first_nameserver" | grep -q .; then
   exit 1
 fi
 
-oidc_provider_arn="$(aws iam list-open-id-connect-providers \
+stack_provider_arn="$(aws cloudformation describe-stack-resources \
   --profile "$AWS_PROFILE" \
-  --query "OpenIDConnectProviderList[?ends_with(Arn, '/token.actions.githubusercontent.com')].Arn | [0]" \
-  --output text)"
-if [ "$oidc_provider_arn" = "None" ]; then
+  --region "$AWS_REGION" \
+  --stack-name "$STACK_NAME" \
+  --logical-resource-id GitHubOidcProvider \
+  --query 'StackResources[0].PhysicalResourceId' \
+  --output text 2>/dev/null || true)"
+
+if [ -n "$stack_provider_arn" ] && [ "$stack_provider_arn" != "None" ]; then
   oidc_provider_arn=""
+else
+  oidc_provider_arn="$(aws iam list-open-id-connect-providers \
+    --profile "$AWS_PROFILE" \
+    --query "OpenIDConnectProviderList[?ends_with(Arn, '/token.actions.githubusercontent.com')].Arn | [0]" \
+    --output text)"
+  if [ "$oidc_provider_arn" = "None" ]; then
+    oidc_provider_arn=""
+  fi
 fi
 
 aws cloudformation deploy \

@@ -43,6 +43,7 @@ jobs:
 
       - name: Verify OIDC identity
         env:
+          EXPECTED_ISSUER: https://token.actions.githubusercontent.com
           EXPECTED_SUBJECT: repo:cdimartino@191587/raibert@1373118135:ref:refs/heads/main
         run: |
           response="$(curl --fail --silent --show-error \
@@ -53,22 +54,22 @@ jobs:
           import base64, json, sys
           token = sys.stdin.read().strip()
           expected = sys.argv[1]
-          header = token.split(".")[0]
-          header += "=" * (-len(header) % 4)
-          header = json.loads(base64.urlsafe_b64decode(header))
+          expected_issuer = sys.argv[2]
           payload = token.split(".")[1]
           payload += "=" * (-len(payload) % 4)
           claims = json.loads(base64.urlsafe_b64decode(payload))
           public_claims = {
               key: claims.get(key)
-              for key in ("iss", "aud", "sub", "repository", "ref", "enterprise", "enterprise_id", "iat", "nbf", "exp")
+              for key in ("iss", "aud", "sub", "repository", "ref")
           }
-          public_claims["header"] = {key: header.get(key) for key in ("alg", "kid", "typ")}
-          public_claims["token_length"] = len(token)
           print(json.dumps(public_claims, sort_keys=True))
-          if claims.get("aud") != "sts.amazonaws.com" or claims.get("sub") != expected:
+          if (
+              claims.get("iss") != expected_issuer
+              or claims.get("aud") != "sts.amazonaws.com"
+              or claims.get("sub") != expected
+          ):
               raise SystemExit("Unexpected GitHub OIDC identity")
-          ' "$EXPECTED_SUBJECT" <<<"$token"
+          ' "$EXPECTED_SUBJECT" "$EXPECTED_ISSUER" <<<"$token"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6.3.0
