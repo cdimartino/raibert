@@ -113,6 +113,21 @@ Docker must support `linux/amd64` containers. The script reuses the ignored `bui
 
 Run `python3 script/build_audio.py` to regenerate the original 20 ambient loops and 15 effects using Python's standard library. The score uses slow D-major harmony, warm pads, and sparse mallet notes at 60 BPM, with no percussion. WAVs are checked in and shared by desktop and browser; audio generation is not needed to play. The mix lives in `game.rb` (music `0.18`, effects `0.55`); individual cue envelopes and levels live in the generator.
 
+## Deploy raibert.lol
+
+Production is a static deployment to a private S3 bucket behind CloudFront. CloudFormation owns the bucket, CDN, certificate, DNS aliases, `www` redirect, and least-privilege GitHub deployment role. The Rack server remains the local browser-development path.
+
+Authenticate to the AWS account containing the public `raibert.lol` hosted zone with a non-root identity. The bootstrap script refuses to run as the AWS account root user and refuses to deploy when the registrar nameservers do not match the hosted zone.
+
+```sh
+aws login --profile raibert-admin --remote
+AWS_PROFILE=raibert-admin script/bootstrap_aws
+```
+
+The bootstrap creates or updates the `raibert-prod` stack in `us-east-1`, packages the committed browser build, deploys it, and prints the deployment role ARN. Set that ARN as the non-secret `AWS_DEPLOY_ROLE_ARN` repository variable in GitHub. Future pushes to `main` run the browser tests and deploy through short-lived GitHub OIDC credentials; no AWS access key is stored in GitHub.
+
+`script/package_site DESTINATION` assembles `public/` and `assets/` into the S3 layout and precompresses the large Wasm artifact. `script/deploy_site DESTINATION` repeats only the content deployment with an authenticated AWS profile. The infrastructure deliberately reuses an existing hosted zone and does not register the domain or create another zone. CloudFormation retains the versioned site bucket if the stack is deleted; old object versions expire after 30 days.
+
 ## Command-line options
 
 These options apply to the native desktop launch only; the browser always opens the character and difficulty selection screen at Level 1.
@@ -182,6 +197,7 @@ mise exec -- bundle exec ruby test/smoke_test.rb
 mise exec -- ruby test/web_shim_test.rb
 mise exec -- bundle exec ruby test/rack_test.rb
 node test/audio_test.mjs
+mise exec -- ruby test/site_test.rb
 ```
 
 The smoke test covers campaign progression, CLI validation, difficulty scaling, enemies, touchdown timing, rescues, powerup effects and expiry, life limits, Game Over reset, and Level 20 victory.
@@ -196,13 +212,16 @@ config/controls.json    Customizable key bindings
 config.ru               Rack entry point for the browser build
 web/                    Browser Gosu compatibility layer and Wasm boot code
 public/                  Browser shell and compiled WebAssembly runtime
+infra/site.yml           AWS production infrastructure
 script/build_web         Reproducible Docker-based web runtime build
+script/bootstrap_aws     Guarded infrastructure bootstrap and initial deploy
 assets/art/             Stage, enemy, rescue, and powerup artwork
 assets/music/           One soundtrack per level
 assets/sounds/          Distinct soft gameplay cues
 script/build_audio.py   Reproducible ambient score and sound effects
 assets/rai*/            Character sprite sheets
 test/smoke_test.rb      Runnable gameplay rules check
+test/site_test.rb       Static deployment package check
 ```
 
 ## Credits and licensing

@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DOMAIN="raibert.lol"
+STACK_NAME="${STACK_NAME:-raibert-prod}"
+AWS_REGION="${AWS_REGION:-us-east-1}"
+AWS_PROFILE="${AWS_PROFILE:-raibert-admin}"
+
+identity="$(aws sts get-caller-identity --profile "$AWS_PROFILE" --output json)"
+identity_arn="$(ruby -rjson -e 'puts JSON.parse(STDIN.read).fetch("Arn")' <<< "$identity")"
+account_id="$(ruby -rjson -e 'puts JSON.parse(STDIN.read).fetch("Account")' <<< "$identity")"
+
+if [[ "$identity_arn" == *":root" ]]; then
+  echo "Refusing to provision AWS resources as the root user: $identity_arn" >&2
+  exit 1
+fi
+
+zones="$(aws route53 list-hosted-zones --profile "$AWS_PROFILE" --output json)"
+hosted_zone_id="$(ruby -rjson -e '
+  domain = ARGV.fetch(0).sub(/\.?\z/, ".")
+  zones = JSON.parse(STDIN.read).fetch("HostedZones").select { |zone| zone.fetch("Name") == domain && !zone.dig("Config", "PrivateZone") }
+  abort "Expected one public hosted zone for #{domain}, found #{zones.length}" unless zones.length == 1
+  puts zones.first.fetch("Id").sub(%r{\A/hostedzone/}, "")
+' "$DOMAIN" <<< "$zones")"
+
+zone_details="$(aws route53 get-hosted-zone --profile "$AWS_PROFILE" --id "$hosted_zone_id" --output json)"
+zone_nameservers="$(ruby -rjson -e '
+  puts JSON.parse(STDIN.read).fetch("DelegationSet").fetch("NameServers").map(&:downcase).sort
+' <<< "$zone_details")"
+delegated_nameservers="$(
+  dig NS "$DOMAIN" @b.nic.lol +noall +authority |
+    awk '$4 == "NS" { print $5 }' |
+    sed 's/\.$//' |
+    tr '[:upper:]' '[:lower:]' |
+    sort
+)"
+
+if [ -z "$delegated_nameservers" ] || [ "$zone_nameservers" != "$delegated_nameservers" ]; then
+  echo "The registrar delegation does not match hosted zone $hosted_zone_id." >&2
+  echo "Set the registrar nameservers to:" >&2
+  while IFS= read -r nameserver; do
+    echo "  $nameserver" >&2
+  done <<< "$zone_nameservers"
+  exit 1
+fi
+
+first_nameserver="$(printf '%s\n' "$zone_nameservers" | head -n 1)"
+if ! dig +short SOA "$DOMAIN" "@$first_nameserver" | grep -q .; then
+  echo "The delegated Route 53 nameservers are not authoritative yet; retry after DNS propagation." >&2
+  exit 1
+fi
+
+oidc_provider_arn="$(aws iam list-open-id-connect-providers \
+  --profile "$AWS_PROFILE" \
+  --query "OpenIDConnectProviderList[?ends_with(Arn, '/token.actions.githubusercontent.com')].Arn | [0]" \
+  --output text)"
+if [ "$oidc_provider_arn" = "None" ]; then
+  oidc_provider_arn=""
+fi
+
+aws cloudformation deploy \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION" \
+  --stack-name "$STACK_NAME" \
+  --template-file "$ROOT/infra/site.yml" \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --no-fail-on-empty-changes \
+  --parameter-overrides \
+    HostedZoneId="$hosted_zone_id" \
+    GitHubRepository="cdimartino/raibert" \
+    ExistingGitHubOidcProviderArn="$oidc_provider_arn"
+
+site_dir="$(mktemp -d)"
+trap 'rm -rf "$site_dir"' EXIT
+"$ROOT/script/package_site" "$site_dir"
+AWS_PROFILE="$AWS_PROFILE" AWS_REGION="$AWS_REGION" STACK_NAME="$STACK_NAME" \
+  "$ROOT/script/deploy_site" "$site_dir"
+
+deploy_role_arn="$(aws cloudformation describe-stacks \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION" \
+  --stack-name "$STACK_NAME" \
+  --query "Stacks[0].Outputs[?OutputKey=='DeployRoleArn'].OutputValue | [0]" \
+  --output text)"
+
+echo
+echo "AWS account: $account_id"
+echo "Hosted zone: $hosted_zone_id"
+echo "Set the GitHub repository variable AWS_DEPLOY_ROLE_ARN to:"
+echo "$deploy_role_arn"

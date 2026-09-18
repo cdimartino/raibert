@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DESTINATION="${1:-}"
+
+if [ -z "$DESTINATION" ]; then
+  echo "Usage: script/package_site DESTINATION" >&2
+  exit 64
+fi
+
+mkdir -p "$DESTINATION"
+if [ -n "$(find "$DESTINATION" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+  echo "Destination must be empty: $DESTINATION" >&2
+  exit 64
+fi
+
+cp -R "$ROOT/public/." "$DESTINATION/"
+mkdir -p "$DESTINATION/assets"
+cp -R "$ROOT/assets/." "$DESTINATION/assets/"
+
+while IFS= read -r -d '' wasm; do
+  gzip -9 -n -c "$wasm" > "$wasm.gz"
+  mv "$wasm.gz" "$wasm"
+done < <(find "$DESTINATION/web" -maxdepth 1 -type f -name 'ruby-*.wasm' -print0)
+
+echo "Packaged Rai*bert at $DESTINATION"

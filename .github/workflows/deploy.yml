@@ -1,0 +1,53 @@
+name: Deploy raibert.lol
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: raibert-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  BUNDLE_WITHOUT: desktop
+  STACK_NAME: raibert-prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 4.0.7
+          bundler-cache: true
+
+      - name: Test browser build
+        run: |
+          bundle exec ruby test/rack_test.rb
+          ruby test/web_shim_test.rb
+          ruby test/site_test.rb
+
+      - name: Package static site
+        run: script/package_site "$RUNNER_TEMP/raibert-site"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
+          role-session-name: raibert-${{ github.run_id }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+
+      - name: Deploy static site
+        run: script/deploy_site "$RUNNER_TEMP/raibert-site"

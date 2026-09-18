@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SITE_DIR="${1:-}"
+STACK_NAME="${STACK_NAME:-raibert-prod}"
+AWS_REGION="${AWS_REGION:-us-east-1}"
+
+if [ -z "$SITE_DIR" ] || [ ! -f "$SITE_DIR/index.html" ] || [ ! -f "$SITE_DIR/web/runtime.json" ]; then
+  echo "Usage: script/deploy_site PACKAGED_SITE_DIRECTORY" >&2
+  exit 64
+fi
+
+stack_output() {
+  aws cloudformation describe-stacks \
+    --region "$AWS_REGION" \
+    --stack-name "$STACK_NAME" \
+    --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue | [0]" \
+    --output text
+}
+
+BUCKET="$(stack_output SiteBucketName)"
+DISTRIBUTION_ID="$(stack_output DistributionId)"
+
+if [ -z "$BUCKET" ] || [ "$BUCKET" = "None" ] || [ -z "$DISTRIBUTION_ID" ] || [ "$DISTRIBUTION_ID" = "None" ]; then
+  echo "Could not read deployment outputs from CloudFormation stack $STACK_NAME." >&2
+  exit 1
+fi
+
+aws s3 sync "$SITE_DIR/" "s3://$BUCKET/" \
+  --region "$AWS_REGION" \
+  --delete \
+  --cache-control "public,max-age=3600"
+
+for path in index.html 404.html web/runtime.json web/assets.json web/app.js web/app.css; do
+  aws s3 cp "$SITE_DIR/$path" "s3://$BUCKET/$path" \
+    --region "$AWS_REGION" \
+    --cache-control "no-cache, max-age=0, must-revalidate"
+done
+
+runtime_files="$(
+  ruby -rjson -e 'runtime = JSON.parse(File.read(ARGV.fetch(0))); puts runtime.values' "$SITE_DIR/web/runtime.json"
+)"
+
+while IFS= read -r filename; do
+  case "$filename" in
+    *.wasm)
+      aws s3 cp "$SITE_DIR/web/$filename" "s3://$BUCKET/web/$filename" \
+        --region "$AWS_REGION" \
+        --content-type "application/wasm" \
+        --content-encoding "gzip" \
+        --cache-control "public,max-age=31536000,immutable"
+      ;;
+    *.js)
+      aws s3 cp "$SITE_DIR/web/$filename" "s3://$BUCKET/web/$filename" \
+        --region "$AWS_REGION" \
+        --content-type "text/javascript; charset=utf-8" \
+        --cache-control "public,max-age=31536000,immutable"
+      ;;
+    *)
+      echo "Unsupported runtime artifact: $filename" >&2
+      exit 1
+      ;;
+  esac
+done <<< "$runtime_files"
+
+INVALIDATION_ID="$(aws cloudfront create-invalidation \
+  --distribution-id "$DISTRIBUTION_ID" \
+  --paths '/*' \
+  --query 'Invalidation.Id' \
+  --output text)"
+
+echo "Deployed https://raibert.lol (CloudFront invalidation $INVALIDATION_ID)"
