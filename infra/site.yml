@@ -7,8 +7,9 @@ Parameters:
     Description: Existing public Route 53 hosted zone for raibert.lol
   GitHubRepository:
     Type: String
-    Default: cdimartino/raibert
-    AllowedPattern: "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    Default: cdimartino@191587/raibert@1373118135
+    Description: GitHub OIDC repository identity in owner@owner-id/repository@repository-id form
+    AllowedPattern: "^[A-Za-z0-9_.-]+@[0-9]+/[A-Za-z0-9_.-]+@[0-9]+$"
   ExistingGitHubOidcProviderArn:
     Type: String
     Default: ""

@@ -43,7 +43,7 @@ jobs:
 
       - name: Verify OIDC identity
         env:
-          EXPECTED_SUBJECT: repo:${{ github.repository }}:ref:refs/heads/main
+          EXPECTED_SUBJECT: repo:cdimartino@191587/raibert@1373118135:ref:refs/heads/main
         run: |
           response="$(curl --fail --silent --show-error \
             --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \

@@ -124,7 +124,7 @@ aws login --profile raibert-admin --remote
 AWS_PROFILE=raibert-admin script/bootstrap_aws
 ```
 
-The bootstrap creates or updates the `raibert-prod` stack in `us-east-1`, packages the committed browser build, deploys it, and prints the deployment role ARN. Set that ARN as the non-secret `AWS_DEPLOY_ROLE_ARN` repository variable in GitHub. Future pushes to `main` run the browser tests and deploy through short-lived GitHub OIDC credentials; no AWS access key is stored in GitHub.
+The bootstrap creates or updates the `raibert-prod` stack in `us-east-1`, packages the committed browser build, deploys it, and prints the deployment role ARN. Set that ARN as the non-secret `AWS_DEPLOY_ROLE_ARN` repository variable in GitHub. Future pushes to `main` run the browser tests and deploy through short-lived GitHub OIDC credentials; no AWS access key is stored in GitHub. The role trust uses GitHub's immutable owner and repository IDs as well as the `main` ref, so a renamed or transferred repository cannot inherit production access.
 
 `script/package_site DESTINATION` assembles `public/` and `assets/` into the S3 layout and precompresses the large Wasm artifact. `script/deploy_site DESTINATION` repeats only the content deployment with an authenticated AWS profile. The infrastructure deliberately reuses an existing hosted zone and does not register the domain or create another zone. CloudFormation retains the versioned site bucket if the stack is deleted; old object versions expire after 30 days.
 
