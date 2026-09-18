@@ -1,5 +1,6 @@
 [tools]
 ruby = "4.0.7"
+node = "22.20.0"
 
 [env]
 BUNDLE_PATH = "vendor/bundle"

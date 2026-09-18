@@ -177,12 +177,14 @@ class RaiBertWindow < Gosu::Window
 
     old_lives = @game.lives
     death_position = @game.player.dup
-    @game.tick(now)
+    event = @game.tick(now)
     play_level_music if @music_level != @game.level
-    if @game.lives < old_lives
+    if event == :hit || @game.lives < old_lives
       @flash_until = now + 250
       start_respawn(death_position, now)
       play(:hit)
+    elsif GameState::PICKUP_KINDS.include?(event)
+      play(event)
     end
   end
 
@@ -371,7 +373,7 @@ class RaiBertWindow < Gosu::Window
   def land_hop(now)
     hop = @hop
     previous_tile = @game.tiles[hop[:target]]
-    event = @game.move(hop[:direction], now)
+    event = @game.move(hop[:direction], now, started_at: hop[:started_at])
     @hop = nil
     if [:fall, :hit].include?(event)
       @flash_until = now + 250
@@ -623,7 +625,7 @@ class RaiBertWindow < Gosu::Window
 
     pickup = @game.pickup
     destination = [pickup[:row], pickup[:column]]
-    progress = pickup[:moved_at] ? [[(game_time - pickup[:moved_at]) / 250.0, 0].max, 1].min : 1
+    progress = pickup[:moved_at] ? [[(game_time - pickup[:moved_at]) / GameState::OBJECT_MOVE_TIME.to_f, 0].max, 1].min : 1
     x, y = tile_center(interpolate(pickup[:from] || destination, destination, progress))
     y += Math.sin(game_time / 220.0) * 4 - 4
     POWERUP_STYLES.key?(pickup[:kind]) ? draw_powerup(pickup[:kind], x, y, 56, 3.5) : draw_object(pickup[:kind], x, y, 56, 3.5)
@@ -631,7 +633,9 @@ class RaiBertWindow < Gosu::Window
 
   def draw_enemies
     @game.enemies.each do |enemy|
-      x, y = tile_center([enemy[:row], enemy[:column]])
+      destination = [enemy[:row], enemy[:column]]
+      progress = enemy[:moved_at] ? [[(game_time - enemy[:moved_at]) / GameState::OBJECT_MOVE_TIME.to_f, 0].max, 1].min : 1
+      x, y = tile_center(interpolate(enemy[:from] || destination, destination, progress))
       draw_object(enemy[:kind], x, y + 6 + Math.sin(game_time / 170.0 + x) * 2, 65, 3.4)
     end
   end

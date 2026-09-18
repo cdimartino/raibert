@@ -3,6 +3,7 @@
 class GameState
   ROWS = 7
   LEVEL_COUNT = 20
+  OBJECT_MOVE_TIME = 250
   LEVEL_TARGETS = [1, 2, 2, 2, *Array.new(16, 3)].freeze
   PICKUP_KINDS = %i[debugger gc life shield patch].freeze
   DIFFICULTIES = {
@@ -57,7 +58,7 @@ class GameState
     row.between?(0, ROWS - 1) && column.between?(0, row)
   end
 
-  def move(direction, now)
+  def move(direction, now, started_at: now)
     return :ignored unless @status == :playing
 
     from = @player.dup
@@ -70,10 +71,12 @@ class GameState
       return :fall
     end
 
+    motion = { from: from, to: destination, started_at: started_at, ended_at: now }
     @player = destination
+    @player_motion = motion
     touch_tile(destination, now)
-    collected = collect_pickup(now)
-    hit = collide(now)
+    collected = collect_pickup(now, motion: motion)
+    hit = collide(now, motion: motion)
     return :hit if hit
     return @status if %i[stage_clear victory].include?(@status)
 
@@ -89,15 +92,25 @@ class GameState
 
     spawn_pickup(now)
     step_pickup(now)
-    return if now < @freeze_until
+    collected = collect_pickup(now, motion: @player_motion)
+    return collected unless @status == :playing
+    return :hit if collide(now, motion: @player_motion)
+    return collected if now < @freeze_until
 
     spawn_enemy(now)
+    return :hit if collide(now, motion: @player_motion)
+
+    hit = false
     @enemies.dup.each do |enemy|
       next if now < enemy[:next_at]
 
       step_enemy(enemy, now)
-      break if collide(now)
+      if collide(now, motion: @player_motion)
+        hit = true
+        break
+      end
     end
+    hit ? :hit : collected
   end
 
   def invulnerable?(now)
@@ -116,6 +129,7 @@ class GameState
     @tiles = {}
     ROWS.times { |row| (row + 1).times { |column| @tiles[[row, column]] = 0 } }
     @player = [0, 0]
+    @player_motion = nil
     @enemies = []
     @pickup = nil
     @rescues = { left: true, right: true }
@@ -147,30 +161,33 @@ class GameState
   def use_rescue(side, now)
     @rescues[side] = false
     @player = [0, 0]
+    @player_motion = nil
     @score += 250
     @invulnerable_until = now + 1_200
+    collect_pickup(now)
     :rescue
   end
 
   def lose_life(now)
     @lives -= 1
     @player = [0, 0]
+    @player_motion = nil
     @enemies.clear
     @pickup = nil
     @invulnerable_until = now + 1_500
     @status = :game_over if @lives <= 0
   end
 
-  def collide(now)
+  def collide(now, motion: nil)
     return false if invulnerable?(now)
-    return false unless @enemies.any? { |enemy| [enemy[:row], enemy[:column]] == @player }
+    return false unless @enemies.any? { |enemy| entity_collides?(enemy, motion, now) }
 
     lose_life(now)
     true
   end
 
-  def collect_pickup(now)
-    return unless @pickup && [@pickup[:row], @pickup[:column]] == @player
+  def collect_pickup(now, motion: nil)
+    return unless @pickup && entity_collides?(@pickup, motion, now)
 
     kind = @pickup[:kind]
     @pickup = nil
@@ -200,7 +217,7 @@ class GameState
     kinds = PICKUP_KINDS.reject { |kind| kind == :life && @lives >= @starting_lives + 1 }
     @pickup = {
       kind: kinds.sample(random: @random), row: 0, column: 0,
-      from: [-1, -0.5], moved_at: now, next_at: now + pickup_interval
+      from: [-1, -0.5], spawned_at: now, moved_at: now, next_at: now + pickup_interval
     }
     @last_pickup_at = now
   end
@@ -230,7 +247,7 @@ class GameState
 
     kind = enemy_kind
     row, column = kind == :exception ? [ROWS - 1, @random.rand(ROWS)] : [0, 0]
-    @enemies << { kind: kind, row: row, column: column, next_at: now + enemy_interval(kind) }
+    @enemies << { kind: kind, row: row, column: column, spawned_at: now, next_at: now + enemy_interval(kind) }
     @last_spawn_at = now
   end
 
@@ -257,6 +274,7 @@ class GameState
   end
 
   def step_enemy(enemy, now)
+    from = [enemy[:row], enemy[:column]]
     destination = if enemy[:kind] == :exception
                     chasing_step(enemy)
                   else
@@ -268,7 +286,9 @@ class GameState
       return
     end
 
+    enemy[:from] = from
     enemy[:row], enemy[:column] = destination
+    enemy[:moved_at] = now
     enemy[:next_at] = now + enemy_interval(enemy[:kind])
     if enemy[:kind] == :regression
       position = [enemy[:row], enemy[:column]]
@@ -293,6 +313,85 @@ class GameState
 
   def distance(a, b)
     (a[0] - b[0]).abs + (a[1] - b[1]).abs
+  end
+
+  def entity_collides?(entity, motion, now)
+    destination = [entity[:row], entity[:column]]
+    motion ||= { from: @player, to: @player, started_at: now, ended_at: now }
+    existence_start = entity[:spawned_at] || motion[:started_at]
+    return false if motion[:ended_at] < existence_start
+
+    unless entity[:from] && entity[:moved_at]
+      stationary = {
+        from: destination, to: destination,
+        started_at: [motion[:started_at], existence_start].max, ended_at: motion[:ended_at]
+      }
+      return motions_collide?(motion, stationary)
+    end
+
+    entity_ends_at = entity[:moved_at] + OBJECT_MOVE_TIME
+    phases = []
+    if motion[:started_at] <= entity[:moved_at]
+      phases << {
+        from: entity[:from], to: entity[:from],
+        started_at: [motion[:started_at], existence_start].max,
+        ended_at: [motion[:ended_at], entity[:moved_at]].min
+      }
+    end
+    if motion[:ended_at] >= entity[:moved_at] && motion[:started_at] <= entity_ends_at
+      phases << {
+        from: entity[:from], to: destination,
+        started_at: entity[:moved_at], ended_at: entity_ends_at
+      }
+    end
+    if motion[:ended_at] >= entity_ends_at
+      phases << {
+        from: destination, to: destination,
+        started_at: [motion[:started_at], entity_ends_at].max, ended_at: motion[:ended_at]
+      }
+    end
+    phases.any? { |entity_motion| motions_collide?(motion, entity_motion) }
+  end
+
+  def motions_collide?(first, second)
+    overlap_start = [first[:started_at], second[:started_at]].max
+    overlap_end = [first[:ended_at], second[:ended_at]].min
+    return false if overlap_start > overlap_end
+
+    start_delta = position_delta(first, second, overlap_start)
+    end_delta = position_delta(first, second, overlap_end)
+    return true if zero_vector?(start_delta) || zero_vector?(end_delta)
+
+    fractions = start_delta.zip(end_delta).filter_map do |start_value, end_value|
+      change = end_value - start_value
+      return false if change.abs < Float::EPSILON && start_value.abs >= Float::EPSILON
+
+      -start_value / change unless change.abs < Float::EPSILON
+    end
+    return true if fractions.empty?
+
+    fraction = fractions.first
+    fraction.between?(0.0, 1.0) && fractions.all? { |value| (value - fraction).abs < 1e-9 }
+  end
+
+  def position_delta(first, second, now)
+    first_position = position_during(first, now)
+    second_position = position_during(second, now)
+    first_position.zip(second_position).map { |first_value, second_value| first_value - second_value }
+  end
+
+  def position_during(motion, now)
+    duration = motion[:ended_at] - motion[:started_at]
+    return motion[:to].map(&:to_f) unless duration.positive?
+
+    progress = (now - motion[:started_at]).to_f / duration
+    motion[:from].zip(motion[:to]).map do |from, to|
+      from + (to - from) * progress
+    end
+  end
+
+  def zero_vector?(vector)
+    vector.all? { |value| value.abs < 1e-9 }
   end
 
   def advance_stage(now)

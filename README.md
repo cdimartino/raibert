@@ -193,6 +193,8 @@ The full smoke test requires the `desktop` bundle group. A browser-only install 
 
 ```sh
 mise exec -- bundle check
+mise exec -- ruby test/collision_test.rb
+mise exec -- ruby test/gameplay_collision_test.rb
 mise exec -- bundle exec ruby test/smoke_test.rb
 mise exec -- ruby test/web_shim_test.rb
 mise exec -- bundle exec ruby test/rack_test.rb
@@ -201,6 +203,7 @@ mise exec -- ruby test/site_test.rb
 ```
 
 The smoke test covers campaign progression, CLI validation, difficulty scaling, enemies, touchdown timing, rescues, powerup effects and expiry, life limits, Game Over reset, and Level 20 victory.
+The focused collision test covers stationary and in-flight contacts for every powerup and enemy type, enemy spawns, frozen overlaps, rescue arrivals, and expired movement paths. The gameplay collision test drives complete headless campaigns through the real window update loop on every difficulty while checking state invariants on every frame.
 
 ## Project layout
 
@@ -222,6 +225,8 @@ script/build_audio.py   Reproducible ambient score and sound effects
 assets/rai*/            Character sprite sheets
 test/smoke_test.rb      Runnable gameplay rules check
 test/site_test.rb       Static deployment package check
+test/collision_test.rb  Focused moving-object collision regression check
+test/gameplay_collision_test.rb  Full headless campaign and invariant check
 ```
 
 ## Credits and licensing
