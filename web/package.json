@@ -2,7 +2,7 @@
   "name": "raibert-web-runtime",
   "private": true,
   "scripts": {
-    "test": "node ../test/audio_test.mjs",
+    "test": "node ../test/audio_test.mjs && node ../test/input_test.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

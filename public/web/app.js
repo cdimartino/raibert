@@ -1,8 +1,11 @@
+import { classifyGameplaySwipe, menuPrimaryAction } from "./input.js";
+
 const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d", { alpha: false });
 const status = document.querySelector("#status");
 const surface = document.querySelector("#game-surface");
 const menuDialog = document.querySelector("#menu-dialog");
+const menuPrimaryButton = document.querySelector("[data-menu-primary]");
 const leaderboardDialog = document.querySelector("#leaderboard-dialog");
 const floatingControls = document.querySelector("#floating-controls");
 const SETTINGS_KEY = "raibert.settings.v1";
@@ -249,7 +252,8 @@ function dispatchAction(action) {
   audio.resume();
   actionCallback(action);
   if (gameState.screen === "select" && action === "confirm") gameState = { ...gameState, screen: "game", status: "playing" };
-  else if (gameState.screen === "game" && action === "pause") gameState = { ...gameState, paused: !gameState.paused };
+  else if (gameState.screen === "game" && ["game_over", "victory"].includes(gameState.status) && action === "confirm") gameState = { ...gameState, status: "playing", paused: false };
+  else if (gameState.screen === "game" && gameState.status === "playing" && action === "pause") gameState = { ...gameState, paused: !gameState.paused };
 }
 
 function browserKey(event) {
@@ -347,6 +351,7 @@ globalThis.RaiBertWeb = {
   publishGameState(json) {
     const previous = gameState;
     gameState = JSON.parse(String(json));
+    if (menuDialog.open) updateMenuPrimaryAction();
     if (!["game_over", "victory"].includes(previous.status) && ["game_over", "victory"].includes(gameState.status)) {
       pendingRun = { runId: crypto.randomUUID(), score: gameState.score, stage: gameState.stage, difficulty: gameState.difficulty, outcome: gameState.status };
       openLeaderboard(true);
@@ -410,18 +415,27 @@ canvas.addEventListener("pointerup", event => {
     dispatchAction(Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "select_left" : "select_right") : (dy < 0 ? "select_up" : "select_down"));
     return;
   }
-  const ratio = Math.min(Math.abs(dx), Math.abs(dy)) / Math.max(Math.abs(dx), Math.abs(dy));
-  if (ratio < .35) return;
-  dispatchAction(`${dy < 0 ? "up" : "down"}_${dx < 0 ? "left" : "right"}`);
+  const action = classifyGameplaySwipe(dx, dy);
+  if (action) dispatchAction(action);
 });
+
+function resumableRun() { return gameState.screen === "game" && gameState.status === "playing"; }
+function updateMenuPrimaryAction() {
+  const action = menuPrimaryAction(gameState);
+  menuPrimaryButton.dataset.action = action;
+  menuPrimaryButton.value = action;
+  menuPrimaryButton.textContent = action === "replay" ? "Replay" : action === "play" ? "Play" : "Resume";
+}
 
 function openMenu() {
   if (leaderboardDialog.open || menuDialog.open) return;
-  if (gameState.screen === "game" && !gameState.paused) dispatchAction("pause");
+  if (resumableRun() && !gameState.paused) dispatchAction("pause");
+  updateMenuPrimaryAction();
   document.querySelector("#floating-toggle").checked = settings.overlay.enabled;
   menuDialog.showModal(); updateFloatingControls();
 }
-menuDialog.addEventListener("close", () => { if (gameState.screen === "game" && gameState.paused && !keepPausedForDialog) dispatchAction("pause"); keepPausedForDialog = false; updateFloatingControls(); canvas.focus(); });
+menuPrimaryButton.addEventListener("click", () => { if (["replay", "play"].includes(menuPrimaryButton.dataset.action)) dispatchAction("confirm"); });
+menuDialog.addEventListener("close", () => { if (resumableRun() && gameState.paused && !keepPausedForDialog) dispatchAction("pause"); keepPausedForDialog = false; updateFloatingControls(); canvas.focus(); });
 document.querySelector("[data-leaderboard]").addEventListener("click", () => { keepPausedForDialog = true; leaderboardPausedGame = gameState.screen === "game" && gameState.paused; menuDialog.close(); openLeaderboard(false); });
 document.querySelector("[data-mute]").addEventListener("click", () => dispatchAction("mute"));
 document.querySelector("[data-reset]").addEventListener("click", () => { settings = cloneDefaults(); persistSettings(); location.reload(); });
@@ -499,7 +513,7 @@ async function openLeaderboard(offerSubmission) {
 }
 leaderboardDialog.querySelectorAll("[data-close]").forEach(button => button.addEventListener("click", () => leaderboardDialog.close()));
 leaderboardDialog.querySelector("[data-retry]").addEventListener("click", loadLeaderboard);
-leaderboardDialog.addEventListener("close", () => { if (leaderboardPausedGame && gameState.paused) dispatchAction("pause"); leaderboardPausedGame = false; updateFloatingControls(); canvas.focus(); });
+leaderboardDialog.addEventListener("close", () => { if (leaderboardPausedGame && resumableRun() && gameState.paused) dispatchAction("pause"); leaderboardPausedGame = false; updateFloatingControls(); canvas.focus(); });
 document.querySelector("[data-skip]").addEventListener("click", () => { document.querySelector("#initials-form").hidden=true; pendingRun=null; });
 document.querySelector("#initials").addEventListener("input", event => { event.target.value=event.target.value.toUpperCase().replace(/[^A-Z]/g,"").slice(0,3); });
 document.querySelector("#initials-form").addEventListener("submit", async event => {

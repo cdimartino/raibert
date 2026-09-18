@@ -47,7 +47,7 @@ test("portrait gestures fill the viewport and the optional controls persist", as
   await expect.poll(() => canvasFrame(page)).not.toBe(selectionFrame);
   await page.locator("#game").click({ position: { x: 195, y: 420 } });
   const playingFrame = await canvasFrame(page);
-  await swipe(page, { x: 200, y: 400 }, { x: 260, y: 460 });
+  await swipe(page, { x: 200, y: 400 }, { x: 280, y: 406 });
   await expect.poll(() => canvasFrame(page)).not.toBe(playingFrame);
   await page.locator("#game").click({ position: { x: 40, y: 700 } });
   await expect(page.locator("#menu-dialog")).toBeVisible();
@@ -61,6 +61,25 @@ test("portrait gestures fill the viewport and the optional controls persist", as
   expect(canvasBox.width).toBe(390); expect(canvasBox.height).toBe(844);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollHeight <= innerHeight)).toBe(true);
   expect(pageErrors).toEqual([]);
+});
+
+test("post-loss menu offers replay and starts a fresh run", async ({ page }) => {
+  await waitForGame(page);
+  await page.keyboard.press("Enter");
+  await page.evaluate(() => globalThis.RaiBertWeb.publishGameState(JSON.stringify({
+    screen: "game", status: "game_over", score: 100, stage: 1, difficulty: "normal", paused: false
+  })));
+  await expect(page.locator("#leaderboard-dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).last().click();
+  await page.locator("#game").click({ position: { x: 80, y: 180 } });
+  await expect(page.locator("#menu-dialog")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Replay" })).toBeVisible();
+  await page.getByRole("button", { name: "Replay" }).click();
+  await expect(page.locator("#menu-dialog")).toBeHidden();
+
+  await page.locator("#game").click({ position: { x: 80, y: 180 } });
+  await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
+  await page.getByRole("button", { name: "Resume" }).click();
 });
 
 test("leaderboard is keyboard accessible and survives an offline refresh", async ({ page }) => {
