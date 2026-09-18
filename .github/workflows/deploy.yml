@@ -41,6 +41,27 @@ jobs:
       - name: Package static site
         run: script/package_site "$RUNNER_TEMP/raibert-site"
 
+      - name: Verify OIDC identity
+        env:
+          EXPECTED_SUBJECT: repo:${{ github.repository }}:ref:refs/heads/main
+        run: |
+          response="$(curl --fail --silent --show-error \
+            --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")"
+          token="$(jq --raw-output .value <<<"$response")"
+          python3 -c '
+          import base64, json, sys
+          token = sys.stdin.read().strip()
+          expected = sys.argv[1]
+          payload = token.split(".")[1]
+          payload += "=" * (-len(payload) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload))
+          public_claims = {key: claims.get(key) for key in ("aud", "sub", "repository", "ref")}
+          print(json.dumps(public_claims, sort_keys=True))
+          if claims.get("aud") != "sts.amazonaws.com" or claims.get("sub") != expected:
+              raise SystemExit("Unexpected GitHub OIDC identity")
+          ' "$EXPECTED_SUBJECT" <<<"$token"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
