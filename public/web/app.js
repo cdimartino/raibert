@@ -359,7 +359,14 @@ globalThis.RaiBertWeb = {
   }
 };
 
+function acceptsTextInput(target) {
+  return target instanceof HTMLElement && (
+    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable
+  );
+}
+
 document.addEventListener("keydown", event => {
+  if (acceptsTextInput(event.target)) return;
   if ((event.key === "l" || event.key === "L") && !event.repeat && !leaderboardDialog.open) {
     event.preventDefault(); openLeaderboard(false); return;
   }

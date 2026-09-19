@@ -82,6 +82,40 @@ test("post-loss menu offers replay and starts a fresh run", async ({ page }) => 
   await page.getByRole("button", { name: "Resume" }).click();
 });
 
+test("qualifying players can type and submit leaderboard initials", async ({ page }) => {
+  await waitForGame(page);
+  await page.unroute("**/api/leaderboard");
+  let submission;
+  await page.route("**/api/leaderboard", async route => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: { version: 1, highScore: 256400, entries: [] } });
+      return;
+    }
+    submission = route.request().postDataJSON();
+    await route.fulfill({ json: {
+      version: 2,
+      highScore: 100,
+      rank: 1,
+      entry: { id: "new-entry" },
+      entries: [{ id: "new-entry", rank: 1, initials: "RAI", score: 100, stage: 1, difficulty: "normal", outcome: "game_over" }]
+    } });
+  });
+
+  await page.keyboard.press("Enter");
+  await page.evaluate(() => globalThis.RaiBertWeb.publishGameState(JSON.stringify({
+    screen: "game", status: "game_over", score: 100, stage: 1, difficulty: "normal", paused: false
+  })));
+
+  const initials = page.getByLabel("You made the board — enter three initials");
+  await expect(initials).toBeFocused();
+  await page.keyboard.type("rai");
+  await expect(initials).toHaveValue("RAI");
+  await page.getByRole("button", { name: "Submit score" }).click();
+  await expect(page.getByText("Accepted at rank 1.")).toBeVisible();
+  expect(submission).toMatchObject({ initials: "RAI", score: 100, stage: 1, difficulty: "normal", outcome: "game_over" });
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("raibert.settings.v1")).initials)).toBe("RAI");
+});
+
 test("leaderboard is keyboard accessible and survives an offline refresh", async ({ page }) => {
   await waitForGame(page);
   await page.keyboard.press("KeyL");
