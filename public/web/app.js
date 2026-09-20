@@ -507,6 +507,10 @@ async function loadLeaderboard() {
     return cached;
   }
 }
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+}
 async function openLeaderboard(offerSubmission) {
   if (menuDialog.open) menuDialog.close();
   if (gameState.screen === "game" && gameState.status === "playing" && !gameState.paused) { dispatchAction("pause"); leaderboardPausedGame = true; }
@@ -528,7 +532,8 @@ document.querySelector("#initials-form").addEventListener("submit", async event 
   if (!/^[A-Z]{3}$/.test(initials) || !pendingRun) return;
   const message=document.querySelector("#leaderboard-status"); message.textContent="Submitting score…";
   try {
-    const response=await fetch("/api/leaderboard",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...pendingRun,initials})});
+    const body=JSON.stringify({...pendingRun,initials});
+    const response=await fetch("/api/leaderboard",{method:"POST",headers:{"content-type":"application/json","x-amz-content-sha256":await sha256Hex(body)},body});
     const board=await response.json(); if(!response.ok) throw new Error(board.error||`HTTP ${response.status}`);
     settings.initials=initials; persistSettings(); renderLeaderboard(board,board.entry?.id); document.querySelector("#initials-form").hidden=true;
     message.textContent=board.rank ? `Accepted at rank ${board.rank}.` : "The cutoff changed; this run did not qualify."; pendingRun=null;

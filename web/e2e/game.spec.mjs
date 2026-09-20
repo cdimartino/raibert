@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
 async function waitForGame(page) {
@@ -86,12 +87,14 @@ test("qualifying players can type and submit leaderboard initials", async ({ pag
   await waitForGame(page);
   await page.unroute("**/api/leaderboard");
   let submission;
+  let payloadHash;
   await page.route("**/api/leaderboard", async route => {
     if (route.request().method() === "GET") {
       await route.fulfill({ json: { version: 1, highScore: 256400, entries: [] } });
       return;
     }
     submission = route.request().postDataJSON();
+    payloadHash = route.request().headers()["x-amz-content-sha256"];
     await route.fulfill({ json: {
       version: 2,
       highScore: 100,
@@ -113,6 +116,7 @@ test("qualifying players can type and submit leaderboard initials", async ({ pag
   await page.getByRole("button", { name: "Submit score" }).click();
   await expect(page.getByText("Accepted at rank 1.")).toBeVisible();
   expect(submission).toMatchObject({ initials: "RAI", score: 100, stage: 1, difficulty: "normal", outcome: "game_over" });
+  expect(payloadHash).toBe(createHash("sha256").update(JSON.stringify(submission)).digest("hex"));
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("raibert.settings.v1")).initials)).toBe("RAI");
 });
 

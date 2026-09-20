@@ -13,12 +13,14 @@ def assert(condition, message)
 end
 
 infrastructure = File.read(File.join(ROOT, "infra/site.yml"))
+browser_application = File.read(File.join(ROOT, "public/web/app.js"))
 assert(infrastructure.include?("OriginAccessControlOriginType: lambda") && infrastructure.include?("AuthType: AWS_IAM"), "Lambda origin is private and signed by CloudFront")
 assert(infrastructure.include?("Scope: CLOUDFRONT") && infrastructure.include?("RateBasedStatement:"), "CloudFront WAF rate limits the API")
 assert(infrastructure.include?("PointInTimeRecoveryEnabled: true") && infrastructure.scan("DeletionPolicy: Retain").length >= 3, "stateful resources are protected and retained")
 assert(infrastructure.include?("LeaderboardReservedConcurrency:") && infrastructure.include?("ReserveLeaderboardConcurrency") && infrastructure.include?("ReservedConcurrentExecutions: !If"), "Lambda reserved concurrency can be enabled when the account quota permits")
 assert(infrastructure.include?("RetentionInDays: 30"), "Lambda logs have bounded retention")
 assert(infrastructure.include?("DynamoDBCrudPolicy:") && !infrastructure.include?("Action: \"*\""), "leaderboard role is scoped to its table")
+assert(browser_application.include?("x-amz-content-sha256") && browser_application.include?("crypto.subtle.digest"), "leaderboard submissions include the payload hash required by the signed Lambda origin")
 
 Dir.mktmpdir("raibert-site-") do |destination|
   output, status = Open3.capture2e(File.join(ROOT, "script/package_site"), destination)
