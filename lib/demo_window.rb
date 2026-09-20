@@ -91,10 +91,7 @@ class DemoWindow < RaiBertWindow
   end
 
   def legal_moves
-    GameState::DIRECTIONS.filter_map do |direction, _delta|
-      destination = @game.target_for(direction)
-      [direction, destination] if @game.valid?(destination)
-    end
+    @game.board.neighbors(@game.player)
   end
 
   def safe_landing?(destination, future)
@@ -107,8 +104,7 @@ class DemoWindow < RaiBertWindow
 
     moving = @game.enemies.select { |enemy| enemy[:next_at] <= future }
     return false if moving.any? { |enemy| possible_enemy_steps(enemy, destination).include?(destination) }
-    return false if spawn_possible?(future, destination) && destination[0] == GameState::ROWS - 1 &&
-                    @game.level >= 2 && moving.any?
+    return false if spawn_possible?(future, destination) && possible_spawn_positions.include?(destination) && moving.any?
 
     true
   end
@@ -123,7 +119,7 @@ class DemoWindow < RaiBertWindow
       choices = possible_enemy_steps(enemy, destination)
       choices.include?(destination) ? 1.0 / choices.length : 0
     end
-    risk += 1 if spawn_possible?(future, destination) && destination[0] == GameState::ROWS - 1
+    risk += 1 if spawn_possible?(future, destination) && possible_spawn_positions.include?(destination)
     risk
   end
 
@@ -134,7 +130,7 @@ class DemoWindow < RaiBertWindow
 
     moving = @game.enemies.select { |enemy| enemy_moves_by?(enemy, future) }
     return false if moving.any? { |enemy| possible_enemy_steps(enemy, @game.player).include?(@game.player) }
-    return false if spawn_possible?(future, @game.player) && @game.player[0] == GameState::ROWS - 1 && moving.any?
+    return false if spawn_possible?(future, @game.player) && possible_spawn_positions.include?(@game.player) && moving.any?
 
     true
   end
@@ -157,8 +153,8 @@ class DemoWindow < RaiBertWindow
   end
 
   def possible_spawn_positions
-    positions = [[0, 0]]
-    positions.concat((0...GameState::ROWS).map { |column| [GameState::ROWS - 1, column] }) if @game.level >= 2
+    positions = [@game.board.start]
+    positions.concat(@game.board.farthest_tiles) if @game.level >= 2
     positions
   end
 
@@ -187,14 +183,11 @@ class DemoWindow < RaiBertWindow
         queue << [destination, distance + 1]
       end
     end
-    GameState::ROWS * 2
+    @game.tiles.length
   end
 
   def legal_destinations(position)
-    GameState::DIRECTIONS.values.filter_map do |delta|
-      destination = [position[0] + delta[0], position[1] + delta[1]]
-      destination if @game.valid?(destination)
-    end
+    @game.board.neighbors(position).map(&:last)
   end
 
   def enemy_moves_by?(enemy, future)
@@ -204,16 +197,14 @@ class DemoWindow < RaiBertWindow
   def possible_enemy_steps(enemy, player = nil)
     origin = enemy_position(enemy)
     unless enemy[:kind] == :exception
-      return [[origin[0] + 1, origin[1]], [origin[0] + 1, origin[1] + 1]].select do |position|
-        @game.valid?(position)
-      end
+      return %i[down_left down_right].filter_map { |direction| @game.connection_for(origin, direction)&.to }
     end
 
     choices = legal_destinations(origin)
     return choices unless player
 
-    nearest = choices.map { |position| distance(position, player) }.min
-    choices.select { |position| distance(position, player) == nearest }
+    nearest = choices.map { |position| graph_distance(position, [player]) }.min
+    choices.select { |position| graph_distance(position, [player]) == nearest }
   end
 
   def enemy_position(enemy)
@@ -229,12 +220,14 @@ class DemoWindow < RaiBertWindow
   end
 
   def available_rescue_direction
-    return :up_left if @game.player == [4, 0] && @game.rescues[:left]
-    return :up_right if @game.player == [4, 4] && @game.rescues[:right]
+    rescue_edge = @game.board.rescues.find do |(position, _direction), side|
+      position == @game.player && @game.rescues[side]
+    end
+    rescue_edge&.first&.last
   end
 
   def spawn_possible?(future, destination)
-    future >= @game.freeze_until && destination != [0, 0] && @game.enemies.length < @game.enemy_cap &&
+    future >= @game.freeze_until && destination != @game.board.start && @game.enemies.length < @game.enemy_cap &&
       future - @last_spawn_at >= spawn_interval
   end
 

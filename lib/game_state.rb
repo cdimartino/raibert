@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "board_layouts"
+
 class GameState
   ROWS = 7
   LEVEL_COUNT = 20
@@ -24,7 +26,7 @@ class GameState
 
   attr_reader :player, :tiles, :enemies, :pickup, :lives, :score, :stage,
               :level, :target, :status, :rescues, :freeze_until, :shield_until,
-              :difficulty
+              :difficulty, :board
 
   def initialize(random: Random.new, now: 0, difficulty: :normal, start_level: 1, starting_lives: nil)
     @random = random
@@ -49,29 +51,36 @@ class GameState
   end
 
   def target_for(direction)
-    delta = DIRECTIONS.fetch(direction)
-    [@player[0] + delta[0], @player[1] + delta[1]]
+    connection_for(@player, direction)&.to || @board.fall_target(@player, direction)
+  end
+
+  def connection_for(position, direction)
+    @board.connection(position, direction)
+  end
+
+  def neighbors(position = @player)
+    @board.neighbors(position)
   end
 
   def valid?(position)
-    row, column = position
-    row.between?(0, ROWS - 1) && column.between?(0, row)
+    @board.include?(position)
   end
 
   def move(direction, now, started_at: now)
     return :ignored unless @status == :playing
 
     from = @player.dup
-    destination = target_for(direction)
-    unless valid?(destination)
-      rescue_side = RESCUES[[from, direction]]
+    connection = connection_for(from, direction)
+    unless connection
+      rescue_side = @board.rescue_for(from, direction)
       return use_rescue(rescue_side, now) if rescue_side && @rescues[rescue_side]
 
       lose_life(now)
       return :fall
     end
 
-    motion = { from: from, to: destination, started_at: started_at, ended_at: now }
+    destination = connection.to
+    motion = motion_for(connection, started_at, now)
     @player = destination
     @player_motion = motion
     touch_tile(destination, now)
@@ -125,10 +134,10 @@ class GameState
 
   def setup_stage(now)
     @level = @stage
+    @board = BoardLayouts.fetch(@level)
     @target = LEVEL_TARGETS.fetch(@level - 1)
-    @tiles = {}
-    ROWS.times { |row| (row + 1).times { |column| @tiles[[row, column]] = 0 } }
-    @player = [0, 0]
+    @tiles = @board.tiles.to_h { |position| [position, 0] }
+    @player = @board.start.dup
     @player_motion = nil
     @enemies = []
     @pickup = nil
@@ -160,7 +169,7 @@ class GameState
 
   def use_rescue(side, now)
     @rescues[side] = false
-    @player = [0, 0]
+    @player = @board.start.dup
     @player_motion = nil
     @score += 250
     @invulnerable_until = now + 1_200
@@ -170,7 +179,7 @@ class GameState
 
   def lose_life(now)
     @lives -= 1
-    @player = [0, 0]
+    @player = @board.start.dup
     @player_motion = nil
     @enemies.clear
     @pickup = nil
@@ -212,12 +221,12 @@ class GameState
 
   def spawn_pickup(now)
     return if @pickup || now - @last_pickup_at < 8_000
-    return if @player == [0, 0] || @enemies.any? { |enemy| [enemy[:row], enemy[:column]] == [0, 0] }
+    return if @player == @board.start || @enemies.any? { |enemy| [enemy[:row], enemy[:column]] == @board.start }
 
     kinds = PICKUP_KINDS.reject { |kind| kind == :life && @lives >= @starting_lives + 1 }
     @pickup = {
-      kind: kinds.sample(random: @random), row: 0, column: 0,
-      from: [-1, -0.5], spawned_at: now, moved_at: now, next_at: now + pickup_interval
+      kind: kinds.sample(random: @random), row: @board.start[0], column: @board.start[1],
+      from: @board.start, spawned_at: now, moved_at: now, next_at: now + pickup_interval
     }
     @last_pickup_at = now
   end
@@ -226,11 +235,12 @@ class GameState
     return unless @pickup && now >= @pickup[:next_at]
 
     from = [@pickup[:row], @pickup[:column]]
-    destination = descending_step(@pickup)
-    return @pickup = nil unless destination
+    connection = descending_connection(@pickup)
+    return @pickup = nil unless connection
 
     @pickup[:from] = from
-    @pickup[:row], @pickup[:column] = destination
+    @pickup[:row], @pickup[:column] = connection.to
+    apply_connection_metadata(@pickup, connection)
     @pickup[:moved_at] = now
     @pickup[:next_at] = now + pickup_interval
   end
@@ -243,10 +253,14 @@ class GameState
   def spawn_enemy(now)
     return if now - @last_spawn_at < spawn_interval
     return if @enemies.length >= enemy_cap
-    return if @player == [0, 0]
+    return if @player == @board.start
 
     kind = enemy_kind
-    row, column = kind == :exception ? [ROWS - 1, @random.rand(ROWS)] : [0, 0]
+    row, column = if kind == :exception
+                    @board.farthest_tiles.sample(random: @random)
+                  else
+                    @board.start
+                  end
     @enemies << { kind: kind, row: row, column: column, spawned_at: now, next_at: now + enemy_interval(kind) }
     @last_spawn_at = now
   end
@@ -275,19 +289,20 @@ class GameState
 
   def step_enemy(enemy, now)
     from = [enemy[:row], enemy[:column]]
-    destination = if enemy[:kind] == :exception
-                    chasing_step(enemy)
-                  else
-                    descending_step(enemy)
-                  end
+    connection = if enemy[:kind] == :exception
+                   chasing_connection(enemy)
+                 else
+                   descending_connection(enemy)
+                 end
 
-    unless destination
+    unless connection
       @enemies.delete(enemy)
       return
     end
 
     enemy[:from] = from
-    enemy[:row], enemy[:column] = destination
+    enemy[:row], enemy[:column] = connection.to
+    apply_connection_metadata(enemy, connection)
     enemy[:moved_at] = now
     enemy[:next_at] = now + enemy_interval(enemy[:kind])
     if enemy[:kind] == :regression
@@ -297,22 +312,57 @@ class GameState
   end
 
   def descending_step(enemy)
-    row = enemy[:row] + 1
-    return if row >= ROWS
-
-    column = enemy[:column] + @random.rand(2)
-    [row, column]
+    descending_connection(enemy)&.to
   end
 
   def chasing_step(enemy)
-    origin = [enemy[:row], enemy[:column]]
-    choices = DIRECTIONS.values.map { |delta| [origin[0] + delta[0], origin[1] + delta[1]] }.select { |p| valid?(p) }
-    nearest = choices.map { |p| distance(p, @player) }.min
-    choices.select { |p| distance(p, @player) == nearest }.sample(random: @random)
+    chasing_connection(enemy)&.to
   end
 
-  def distance(a, b)
-    (a[0] - b[0]).abs + (a[1] - b[1]).abs
+  def descending_connection(entity)
+    origin = [entity[:row], entity[:column]]
+    %i[down_left down_right].filter_map { |direction| @board.connection(origin, direction) }.sample(random: @random)
+  end
+
+  def chasing_connection(enemy)
+    origin = [enemy[:row], enemy[:column]]
+    choices = DIRECTIONS.keys.filter_map { |direction| @board.connection(origin, direction) }
+    nearest = choices.map { |connection| graph_distance(connection.to, @player) }.min
+    choices.select { |connection| graph_distance(connection.to, @player) == nearest }.sample(random: @random)
+  end
+
+  def graph_distance(origin, destination)
+    return 0 if origin == destination
+
+    distances = { origin => 0 }
+    queue = [origin]
+    until queue.empty?
+      position = queue.shift
+      @board.neighbors(position).each do |_direction, neighbor|
+        next if distances.key?(neighbor)
+
+        distance = distances.fetch(position) + 1
+        return distance if neighbor == destination
+
+        distances[neighbor] = distance
+        queue << neighbor
+      end
+    end
+    Float::INFINITY
+  end
+
+  def motion_for(connection, started_at, ended_at)
+    {
+      from: connection.from, to: connection.to,
+      started_at: started_at, ended_at: ended_at,
+      connection_id: connection.id, path: connection.path, layer: connection.layer
+    }
+  end
+
+  def apply_connection_metadata(entity, connection)
+    entity[:connection_id] = connection.id
+    entity[:path] = connection.path
+    entity[:layer] = connection.layer
   end
 
   def entity_collides?(entity, motion, now)
@@ -341,7 +391,8 @@ class GameState
     if motion[:ended_at] >= entity[:moved_at] && motion[:started_at] <= entity_ends_at
       phases << {
         from: entity[:from], to: destination,
-        started_at: entity[:moved_at], ended_at: entity_ends_at
+        started_at: entity[:moved_at], ended_at: entity_ends_at,
+        connection_id: entity[:connection_id], path: entity[:path], layer: entity[:layer]
       }
     end
     if motion[:ended_at] >= entity_ends_at
@@ -358,8 +409,45 @@ class GameState
     overlap_end = [first[:ended_at], second[:ended_at]].min
     return false if overlap_start > overlap_end
 
-    start_delta = position_delta(first, second, overlap_start)
-    end_delta = position_delta(first, second, overlap_end)
+    # Separate stair ribbons may cross in projection without sharing physical
+    # space. Their endpoints are still ordinary board tiles and are handled by
+    # the position checks below.
+    distinct_layered_connections = first[:connection_id] && second[:connection_id] &&
+                                   first[:connection_id] != second[:connection_id] &&
+                                   first[:layer] != second[:layer]
+    if distinct_layered_connections && overlap_start < overlap_end
+      endpoint_times = [overlap_start, overlap_end, first[:started_at], first[:ended_at],
+                        second[:started_at], second[:ended_at]].select do |time|
+        time.between?(overlap_start, overlap_end)
+      end
+      return true if endpoint_times.any? { |time| zero_vector?(position_delta(first, second, time)) }
+      return false
+    end
+
+    breakpoints = [overlap_start, overlap_end]
+    [first, second].each do |motion|
+      path = motion[:path]
+      next unless path && path.length > 2
+
+      duration = motion[:ended_at] - motion[:started_at]
+      lengths = path.each_cons(2).map do |from, to|
+        Math.sqrt(from.zip(to).sum { |a, b| (b - a)**2 })
+      end
+      traversed = 0.0
+      lengths[0...-1].each do |length|
+        traversed += length
+        time = motion[:started_at] + duration * traversed / lengths.sum
+        breakpoints << time if time.between?(overlap_start, overlap_end)
+      end
+    end
+    breakpoints.sort.uniq.each_cons(2).any? do |interval_start, interval_end|
+      linear_interval_collides?(first, second, interval_start, interval_end)
+    end || linear_interval_collides?(first, second, overlap_start, overlap_start)
+  end
+
+  def linear_interval_collides?(first, second, interval_start, interval_end)
+    start_delta = position_delta(first, second, interval_start)
+    end_delta = position_delta(first, second, interval_end)
     return true if zero_vector?(start_delta) || zero_vector?(end_delta)
 
     fractions = start_delta.zip(end_delta).filter_map do |start_value, end_value|
@@ -385,8 +473,28 @@ class GameState
     return motion[:to].map(&:to_f) unless duration.positive?
 
     progress = (now - motion[:started_at]).to_f / duration
+    path = motion[:path] || [motion[:from], motion[:to]]
+    return interpolate_path(path, progress) if path.length > 2
+
     motion[:from].zip(motion[:to]).map do |from, to|
       from + (to - from) * progress
+    end
+  end
+
+  def interpolate_path(path, progress)
+    return path.last.map(&:to_f) if progress >= 1.0
+
+    lengths = path.each_cons(2).map do |from, to|
+      Math.sqrt(from.zip(to).sum { |first, second| (second - first)**2 })
+    end
+    remaining = lengths.sum * [[progress, 0.0].max, 1.0].min
+    path.each_cons(2).zip(lengths).each do |(from, to), length|
+      if remaining <= length
+        fraction = length.zero? ? 1.0 : remaining / length
+        return from.zip(to).map { |first, second| first + (second - first) * fraction }
+      end
+
+      remaining -= length
     end
   end
 

@@ -43,7 +43,7 @@ def validate_game(game, difficulty, frame)
   assert(game.level.between?(1, GameState::LEVEL_COUNT), "level remains in range at frame #{frame}")
   assert(game.stage.between?(1, GameState::LEVEL_COUNT), "stage remains in range at frame #{frame}")
   assert(game.valid?(game.player), "player remains on a valid tile at frame #{frame}")
-  assert(game.tiles.length == GameState::ROWS * (GameState::ROWS + 1) / 2, "tile count remains stable at frame #{frame}")
+  assert(game.tiles.length == game.board.tiles.length, "tile count matches the active board at frame #{frame}")
   assert(game.tiles.all? { |position, value| game.valid?(position) && value.between?(0, game.target) },
          "tile progress remains valid at frame #{frame}")
   assert(game.enemies.length <= game.enemy_cap, "enemy count remains capped at frame #{frame}")

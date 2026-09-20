@@ -9,6 +9,7 @@ Coverage.start(lines: true)
 load File.expand_path("collision_test.rb", __dir__)
 load File.expand_path("smoke_test.rb", __dir__)
 load File.expand_path("leaderboard_test.rb", __dir__)
+load File.expand_path("board_layouts_test.rb", __dir__)
 
 def coverage_assert(condition, message)
   raise "Unit coverage check failed: #{message}" unless condition
@@ -54,7 +55,10 @@ movement.tiles[[1, 0]] = 1
 movement.send(:step_enemy, regression, 100)
 coverage_assert(movement.tiles[[1, 0]].zero?, "regressions undo completed work")
 
-departing = { kind: :bug, row: GameState::ROWS - 1, column: 0, next_at: 0 }
+departure_tile = movement.board.tiles.find do |position|
+  %i[down_left down_right].none? { |direction| movement.connection_for(position, direction) }
+end
+departing = { kind: :bug, row: departure_tile[0], column: departure_tile[1], next_at: 0 }
 movement.enemies << departing
 movement.send(:step_enemy, departing, 100)
 coverage_assert(!movement.enemies.include?(departing), "descending enemies leave below the board")
@@ -72,8 +76,46 @@ finished = GameState.new(start_level: GameState::LEVEL_COUNT)
 finished.send(:advance_stage, 1_000)
 coverage_assert(finished.status == :victory, "advancing past the final level stays at victory")
 
+coverage_assert(!movement.neighbors.empty? && !movement.valid?([99, 99]), "public graph helpers expose board topology")
+coverage_assert(movement.send(:descending_step, { row: movement.board.start[0], column: movement.board.start[1] }),
+                "descending step compatibility uses the board graph")
+coverage_assert(movement.send(:chasing_step, chaser), "chasing step compatibility uses the board graph")
+coverage_assert(movement.send(:graph_distance, movement.board.start, [99, 99]).infinite?,
+                "unreachable graph positions report infinite distance")
+
+ribbon_game = GameState.new(start_level: 11)
+ribbon = ribbon_game.board.ribbons.first
+connection = ribbon_game.connection_for(ribbon.fetch(:from), ribbon.fetch(:direction))
+motion = ribbon_game.send(:motion_for, connection, 0, 100)
+coverage_assert(ribbon_game.send(:position_during, motion, 50).length == 2,
+                "ribbon motion interpolates through its path")
+coverage_assert(ribbon_game.send(:interpolate_path, connection.path, 1.0) == connection.path.last.map(&:to_f),
+                "ribbon interpolation reaches its endpoint")
+coverage_assert(ribbon_game.send(:interpolate_path, [[0, 0], [0, 0], [1, 1]], 0.0) == [0.0, 0.0],
+                "zero-length ribbon segments are safe")
+coverage_assert(ribbon_game.send(:interpolate_path, [[0, 0], [0, 1], [0, 3]], 0.75) == [0.0, 2.25],
+                "ribbon interpolation advances across multiple segments")
+
+layered_a = { from: [0, 0], to: [0, 2], started_at: 0, ended_at: 100,
+              connection_id: "a", layer: 1, path: [[0, 0], [0, 1], [0, 2]] }
+layered_b = { from: [2, 0], to: [2, 2], started_at: 0, ended_at: 100,
+              connection_id: "b", layer: 2, path: [[2, 0], [2, 1], [2, 2]] }
+coverage_assert(!ribbon_game.send(:motions_collide?, layered_a, layered_b),
+                "separate layered ribbons do not collide")
+layered_b[:from] = [0, 0]
+layered_b[:path] = [[0, 0], [2, 1], [2, 2]]
+coverage_assert(ribbon_game.send(:motions_collide?, layered_a, layered_b),
+                "layered ribbons still collide at shared endpoints")
+same_layer = layered_b.merge(connection_id: "a", layer: 1)
+coverage_assert(ribbon_game.send(:motions_collide?, layered_a, same_layer),
+                "shared ribbon paths use piecewise collision checks")
+
 result = Coverage.result
-targets = [File.expand_path("../lib/game_state.rb", __dir__), File.expand_path("../leaderboard/leaderboard.rb", __dir__)]
+targets = [
+  File.expand_path("../lib/game_state.rb", __dir__),
+  File.expand_path("../lib/board_layouts.rb", __dir__),
+  File.expand_path("../leaderboard/leaderboard.rb", __dir__)
+]
 reports = targets.map do |target|
   lines = result.fetch(target).fetch(:lines)
   executable = lines.each_index.select { |index| !lines[index].nil? }

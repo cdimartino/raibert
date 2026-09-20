@@ -43,6 +43,7 @@ docker run --rm --platform linux/amd64 \
 
     rm -rf /work/app /work/ruby-app.wasm
     install -D /src/game.rb /work/app/game.rb
+    install -D /src/lib/board_layouts.rb /work/app/lib/board_layouts.rb
     install -D /src/lib/game_state.rb /work/app/lib/game_state.rb
     install -D /src/lib/demo_window.rb /work/app/lib/demo_window.rb
     install -D /src/config/controls.json /work/app/config/controls.json
@@ -51,6 +52,7 @@ docker run --rm --platform linux/amd64 \
     bundle exec rbwasm pack /work/ruby-base.wasm --dir /work/app::/app -o /work/ruby-app.wasm
     mkdir -p /work/licenses
     cp /work/ruby-4.0.7/COPYING /work/licenses/CRuby-COPYING
+    cp /src/public/web/licenses/Ruby-logo-NOTICE /work/licenses/Ruby-logo-NOTICE
   '
 
 docker run --rm --platform linux/amd64 \

@@ -1,6 +1,6 @@
 # Rai*bert
 
-Hop the pyramid. Fix the build. Ship the pipeline.
+Hop shifting gemstone boards. Fix the build. Ship the pipeline.
 
 **[▶ Play Rai*bert](https://raibert.lol/)**
 
@@ -15,7 +15,7 @@ Rai*bert is a fast Q*bert-inspired arcade game built in Ruby. Turn every failing
 
 ## Features
 
-- A complete 20-stage campaign across Easy, Normal, and Hard.
+- A complete 20-stage campaign across Easy, Normal, and Hard, progressing from ruby cuts to original impossible stair boards.
 - Two playable Rais, three enemy behaviors, five powerups, rescue platforms, and unique level themes.
 - True full-screen play on desktop and mobile with keyboard or gesture input.
 - An optional movable touch D-pad that remembers where you put it.
@@ -24,7 +24,7 @@ Rai*bert is a fast Q*bert-inspired arcade game built in Ruby. Turn every failing
 
 ## How to play
 
-Land on every tile until the board is green. Avoid enemies, collect falling powerups, and use each side rescue once. Later stages need multiple landings per tile. There are no checkpoints: a failed build starts a new run.
+Land on every tile until the board is green. Each stage introduces a different board shape; later boards add holes, loops, and glowing impossible stair connections. Avoid enemies, collect falling powerups, and use each side rescue once. Later stages need multiple landings per tile. There are no checkpoints: a failed build starts a new run.
 
 ### Desktop
 
@@ -84,8 +84,8 @@ mise exec -- npx --prefix web playwright install chromium
 mise exec -- script/test
 ```
 
-CI enforces 100% executable-line coverage for `GameState` and the leaderboard domain, runs deterministic campaigns, browser-shim and infrastructure checks, and executes Playwright on desktop and mobile viewports. Production deployment runs only after `main` passes CI.
+CI enforces 100% executable-line coverage for `GameState`, the board-layout model/catalog, and the leaderboard domain, runs deterministic campaigns, browser-shim and infrastructure checks, and executes Playwright on desktop and mobile viewports. Production deployment runs only after `main` passes CI.
 
 ## Credits and license
 
-Rai character artwork is derived from `rai-pets-v2.zip`. Game art prompts are preserved in `assets/art/PROMPTS.md`. Rai*bert uses [Gosu](https://www.libgosu.org/), CRuby, and ruby.wasm and is released under the [MIT License](LICENSE).
+Rai character artwork is derived from `rai-pets-v2.zip`. Game art prompts are preserved in `assets/art/PROMPTS.md`. The Level 1 silhouette is adapted from the [Ruby logo](https://www.ruby-lang.org/en/about/logo/), copyright Yukihiro Matsumoto, licensed under [CC BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/); the distributed notice contains the full attribution. Higher-level impossible boards are original compositions. Rai*bert uses [Gosu](https://www.libgosu.org/), CRuby, and ruby.wasm and is released under the [MIT License](LICENSE).

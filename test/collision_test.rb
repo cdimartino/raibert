@@ -84,7 +84,7 @@ spawning_enemy = GameState.new(random: ZeroRandom.new, now: 0)
 spawning_enemy.instance_variable_set(:@level, 2)
 spawning_enemy.instance_variable_set(:@stage, 2)
 spawning_enemy.instance_variable_set(:@last_spawn_at, 0)
-place_player(spawning_enemy, [GameState::ROWS - 1, 0])
+place_player(spawning_enemy, spawning_enemy.board.farthest_tiles.first)
 make_vulnerable(spawning_enemy)
 spawning_enemy.define_singleton_method(:enemy_kind) { :exception }
 assert(spawning_enemy.tick(4_000) == :hit, "an enemy spawning on the player is detected immediately")
@@ -93,7 +93,7 @@ assert(spawning_enemy.lives == 2, "a spawn collision costs a life")
 frozen_overlap = GameState.new(now: 0)
 make_vulnerable(frozen_overlap)
 frozen_overlap.instance_variable_set(:@freeze_until, 1_000)
-frozen_overlap.enemies << { kind: :bug, row: 0, column: 0, next_at: 2_000 }
+frozen_overlap.enemies << { kind: :bug, row: frozen_overlap.player[0], column: frozen_overlap.player[1], next_at: 2_000 }
 assert(frozen_overlap.tick(100) == :hit, "a frozen enemy overlapping the player is still hazardous")
 
 life_then_hit = GameState.new(random: ZeroRandom.new, now: 0)
@@ -107,9 +107,11 @@ assert(life_then_hit.tick(350) == :hit, "a hit is reported even when a life powe
 assert(life_then_hit.lives == 3, "life gain and collision loss are both applied in the same tick")
 
 rescue_pickup = GameState.new(now: 0)
-place_player(rescue_pickup, [4, 0])
-rescue_pickup.instance_variable_set(:@pickup, { kind: :life, row: 0, column: 0 })
-assert(rescue_pickup.move(:up_left, 100) == :rescue, "the rescue platform remains the movement result")
+rescue_edge, = rescue_pickup.board.rescues.find { |_edge, side| side == :left }
+rescue_position, rescue_direction = rescue_edge
+place_player(rescue_pickup, rescue_position)
+rescue_pickup.instance_variable_set(:@pickup, { kind: :life, row: rescue_pickup.board.start[0], column: rescue_pickup.board.start[1] })
+assert(rescue_pickup.move(rescue_direction, 100) == :rescue, "the rescue platform remains the movement result")
 assert(rescue_pickup.lives == 4 && rescue_pickup.pickup.nil?, "returning by rescue collects a summit powerup")
 
 puts "Rai*bert collision check passed"

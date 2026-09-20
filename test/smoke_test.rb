@@ -9,8 +9,9 @@ end
 
 def clear_stage(game, now)
   game.tiles.each_key { |tile| game.tiles[tile] = game.target }
-  game.tiles[[1, 0]] = game.target - 1
-  event = game.move(:down_left, now)
+  direction, destination = game.board.neighbors(game.player).first
+  game.tiles[destination] = game.target - 1
+  event = game.move(direction, now)
   expected = game.level == GameState::LEVEL_COUNT ? :victory : :stage_clear
   assert(game.status == expected, "last fixed tile completes level #{game.level}")
   assert(event == expected, "last fixed tile reports #{expected} for level #{game.level}")
@@ -26,9 +27,9 @@ assert(RaiBertWindow::THEMES.length == 20 && RaiBertWindow::LEVEL_NAMES.length =
 RaiBertWindow::THEMES.each do |theme|
   assert(File.exist?(File.join(__dir__, "../assets/music/#{theme[:music]}.wav")), "#{theme[:music]} soundtrack exists")
 end
-assert(game.player == [0, 0], "player starts at the summit")
+assert(game.player == game.board.start, "player starts at the board's designated start")
 assert(game.difficulty == :normal && game.lives == 3, "normal is the default difficulty")
-assert(game.target_for(:down_right) == [1, 1], "diagonal movement maps to the pyramid")
+assert(game.target_for(:down_right) == [1, 2], "diagonal movement follows the Ruby Mark graph")
 
 options = RaiBertCLI.parse(%w[--level 12 --lives 99 --difficulty hard --demo])
 assert(options == { start_level: 12, starting_lives: 99, difficulty: :hard, demo: true }, "CLI accepts level, lives, difficulty, and demo overrides")
@@ -65,15 +66,16 @@ window.instance_variable_set(:@test_time, 3_000)
 window.define_singleton_method(:game_time) { @test_time }
 window.define_singleton_method(:play) { |_event| }
 window.instance_variable_set(:@controls, RaiBertWindow::CONTROL_ACTIONS.to_h { |action| [action, [action]] })
-place_pickup(landing_game, :life, [1, 1])
+landing_destination = landing_game.target_for(:down_right)
+place_pickup(landing_game, :life, landing_destination)
 window.press(:down_right)
-assert(landing_game.player == [0, 0] && landing_game.tiles[[1, 1]].zero?, "hop does not land at takeoff")
+assert(landing_game.player == landing_game.board.start && landing_game.tiles[landing_destination].zero?, "hop does not land at takeoff")
 window.instance_variable_set(:@test_time, 3_000 + RaiBertWindow::JUMP_TIME - 1)
 window.update
-assert(landing_game.tiles[[1, 1]].zero? && landing_game.lives == 3, "tile and pickup stay unchanged in flight")
+assert(landing_game.tiles[landing_destination].zero? && landing_game.lives == 3, "tile and pickup stay unchanged in flight")
 window.instance_variable_set(:@test_time, 3_000 + RaiBertWindow::JUMP_TIME)
 window.update
-assert(landing_game.player == [1, 1] && landing_game.tiles[[1, 1]] == 1, "touchdown changes the tile")
+assert(landing_game.player == landing_destination && landing_game.tiles[landing_destination] == 1, "touchdown changes the tile")
 assert(landing_game.lives == 4 && landing_game.pickup.nil?, "touchdown collects an extra life")
 assert(landing_game.enemies.length == 1, "enemy scheduler advances at touchdown")
 begin
@@ -140,10 +142,13 @@ assert(normal_pressure.enemies.length == 2 && hard_pressure.enemies.length == 3,
 falling = GameState.new(random: Random.new(1), now: 0)
 falling.move(:down_left, 100)
 falling.tick(8_000)
-assert(falling.pickup && [falling.pickup[:row], falling.pickup[:column]] == [0, 0], "timed pickup starts at the summit")
-6.times { falling.send(:step_pickup, falling.pickup[:next_at]) }
-assert(falling.pickup[:row] == GameState::ROWS - 1, "pickup falls to the bottom row")
-falling.send(:step_pickup, falling.pickup[:next_at])
+assert(falling.pickup && falling.pickup.values_at(:row, :column) == falling.board.start, "timed pickup starts at the board start")
+visited_pickup_tiles = []
+while falling.pickup
+  visited_pickup_tiles << falling.pickup.values_at(:row, :column)
+  falling.send(:step_pickup, falling.pickup[:next_at])
+end
+assert(visited_pickup_tiles.length > 1, "pickup descends through the active board")
 assert(falling.pickup.nil?, "uncollected pickup expires after leaving the board")
 
 bonus = GameState.new(random: Random.new(1), now: 0)
@@ -159,7 +164,7 @@ assert(bonus.lives == 4, "level transition preserves a collected bonus life")
 shielded = GameState.new(random: Random.new(1), now: 0)
 place_pickup(shielded, :shield)
 assert(shielded.send(:collect_pickup, 2_000) == :shield && shielded.shield_until == 7_000, "shield lasts five seconds")
-shielded.enemies << { kind: :bug, row: 0, column: 0, next_at: 9_000 }
+shielded.enemies << { kind: :bug, row: shielded.player[0], column: shielded.player[1], next_at: 9_000 }
 assert(!shielded.send(:collide, 6_999) && shielded.lives == 3, "shield blocks collisions while active")
 assert(shielded.send(:collide, 7_000) && shielded.lives == 2, "shield expires on schedule")
 
@@ -170,13 +175,12 @@ assert(patched.send(:collect_pickup, 2_000) == :patch, "patch pickup is collecte
 assert(patched.tiles.values.sum == progress + 3, "patch repairs three unfinished tiles")
 
 game.move(:down_right, 2_000)
-assert(game.player == [1, 1], "valid hop moves the player")
+assert(game.player == [1, 2], "valid hop moves the player")
 
-game.move(:down_right, 2_100)
-game.move(:down_right, 2_200)
-game.move(:down_right, 2_300)
-assert(game.move(:up_right, 2_400) == :rescue, "edge platform rescues the player")
-assert(game.player == [0, 0], "rescue returns to the summit")
+rescue_edge = game.board.rescues.keys.first
+game.instance_variable_set(:@player, rescue_edge.first)
+assert(game.move(rescue_edge.last, 2_400) == :rescue, "edge platform rescues the player")
+assert(game.player == game.board.start, "rescue returns to the board start")
 
 3.times { |index| game.move(:up_left, 4_000 + index * 2_000) }
 assert(game.status == :game_over, "three falls end the run")

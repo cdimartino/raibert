@@ -47,7 +47,7 @@ class RaiBertWindow < Gosu::Window
   RESPAWN_TIME = 550
 
   THEMES = [
-    { art: "build", music: "build", name: "EMERALD COMPILER GARDEN", accent: 0xff_55efbc, tile: 0xff_224f50, pass: 0xff_70f2be },
+    { art: "scale", music: "build", name: "RUBY CRYSTAL CITADEL", accent: 0xff_e32656, tile: 0xff_5b1830, pass: 0xff_ff668b },
     { art: "test", music: "test", name: "AMETHYST OBSERVATORY", accent: 0xff_c5a0ff, tile: 0xff_393563, pass: 0xff_b996ff },
     { art: "deploy", music: "deploy", name: "AMBER DEPLOYMENT FOUNDRY", accent: 0xff_ffc477, tile: 0xff_694032, pass: 0xff_ffba65 },
     { art: "observe", music: "observe", name: "SAPPHIRE TELEMETRY OCEAN", accent: 0xff_5fd7ff, tile: 0xff_244869, pass: 0xff_72dcff },
@@ -378,12 +378,15 @@ class RaiBertWindow < Gosu::Window
     now = game_time
     from = @game.player.dup
     target = @game.target_for(direction)
-    rescue_side = GameState::RESCUES[[from, direction]]
+    connection = @game.connection_for(from, direction)
+    rescue_side = @game.board.rescue_for(from, direction)
     event = rescue_side && @game.rescues[rescue_side] ? :rescue : :hop
     @last_direction = direction
     @hop = {
       from: from,
       target: target,
+      connection: connection,
+      path: connection&.path,
       direction: direction,
       event: event,
       started_at: now,
@@ -554,7 +557,7 @@ class RaiBertWindow < Gosu::Window
   def draw_game
     draw_hud
     draw_platforms
-    draw_pyramid
+    draw_board
     draw_pickup
     draw_enemies
     draw_player
@@ -580,8 +583,9 @@ class RaiBertWindow < Gosu::Window
     hud_height = portrait? ? 112 : 80
     Gosu.draw_rect(16, 12, viewport_width - 32, hud_height, 0xe609101e, 4.9)
     Gosu.draw_rect(16, 12, 3, hud_height, accent, 5)
-    @small_font.draw_text(format("STAGE %02d  %s", @game.stage, LEVEL_NAMES.fetch(@game.level - 1)), 28, 22, 5, 1, 1, accent)
-    @small_font.draw_text(format("PASS %02d/28  LIVES %02d  %s", fixed, @game.lives, @game.difficulty.to_s.upcase), 28, 48, 5, 1, 1, COLORS[:white])
+    @small_font.draw_text(format("STAGE %02d  %s // %s", @game.stage,
+                                 LEVEL_NAMES.fetch(@game.level - 1), @game.board.name), 28, 22, 5, 1, 1, accent)
+    @small_font.draw_text(format("PASS %02d/%02d  LIVES %02d  %s", fixed, @game.tiles.length, @game.lives, @game.difficulty.to_s.upcase), 28, 48, 5, 1, 1, COLORS[:white])
     center_text(@font, format("SCORE %07d // WORLD %s", @game.score, world), viewport_width / 2, portrait? ? 78 : 22, 5, COLORS[:white])
     @small_font.draw_text(@muted ? "MUTED" : "SOUND ON", viewport_width - 112, 54, 5, 1, 1, COLORS[:muted]) unless portrait?
     effects = []
@@ -596,24 +600,25 @@ class RaiBertWindow < Gosu::Window
       center_text(@small_font, legend, viewport_width / 2, viewport_height - 36, 5, COLORS[:muted])
     end
     Gosu.draw_rect(130, 61, 220, 5, 0xff263444, 5)
-    Gosu.draw_rect(130, 61, 220 * fixed / 28.0, 5, accent, 5.1)
+    Gosu.draw_rect(130, 61, 220 * fixed / @game.tiles.length.to_f, 5, accent, 5.1)
   end
 
-  def draw_pyramid
-    GameState::ROWS.times do |row|
-      (row + 1).times do |column|
-        x, y = tile_center([row, column])
+  def draw_board
+    draw_ribbons
+    @game.board.tiles.sort_by { |position| tile_center(position).reverse }.each do |position|
+        x, y = tile_center(position)
         tw, th = tile_width, tile_height
-        progress = @game.tiles[[row, column]]
+        progress = @game.tiles.fetch(position)
         top_color, label = tile_style(progress)
         side_left = darken(top_color, 0.48)
         side_right = darken(top_color, 0.32)
-        z = 2 + row * 0.01
+        z = 2 + y / [viewport_height, 1].max.to_f * 0.3
+        depth = 18 * tw / TILE_WIDTH.to_f
         draw_diamond(x, y + th / 2, tw / 2 + 5, th / 2, 0x66000000, z - 0.01)
         Gosu.draw_quad(x - tw / 2, y, side_left, x, y + th / 2, side_left,
-                       x, y + th / 2 + 18, COLORS[:shadow], x - tw / 2, y + 18, COLORS[:shadow], z)
+                       x, y + th / 2 + depth, COLORS[:shadow], x - tw / 2, y + depth, COLORS[:shadow], z)
         Gosu.draw_quad(x, y + th / 2, side_right, x + tw / 2, y, side_right,
-                       x + tw / 2, y + 18, COLORS[:shadow], x, y + th / 2 + 18, COLORS[:shadow], z)
+                       x + tw / 2, y + depth, COLORS[:shadow], x, y + th / 2 + depth, COLORS[:shadow], z)
         Gosu.draw_quad(x, y - th / 2, top_color, x + tw / 2, y, top_color,
                        x, y + th / 2, top_color, x - tw / 2, y, top_color, z + 0.01)
         rim = progress == @game.target ? accent : Gosu::Color.new(0xff69858f)
@@ -621,9 +626,32 @@ class RaiBertWindow < Gosu::Window
          [x, y + th / 2, x - tw / 2, y], [x - tw / 2, y, x, y - th / 2]].each do |line|
           Gosu.draw_line(line[0], line[1], rim, line[2], line[3], rim, z + 0.015)
         end
-        draw_diamond(x, y, 33, 15, darken(top_color, 0.88), z + 0.016)
+        draw_diamond(x, y, tw * 0.37, th * 0.33, darken(top_color, 0.88), z + 0.016)
         center_text(@small_font, label, x, y - 8, z + 0.02, COLORS[:background])
+    end
+  end
+
+  def draw_ribbons
+    @game.board.ribbons.each do |spec|
+      path = spec.fetch(:path).map { |point| tile_center(point) }
+      layer = spec.fetch(:layer, 1)
+      z = 1.72 + layer * 0.015
+      path.each_cons(2) do |from, to|
+        (-3..3).each do |offset|
+          color = offset.abs == 3 ? alpha_color(accent, 80) : darken(accent, 0.45 + (3 - offset.abs) * 0.09)
+          Gosu.draw_line(from[0] + offset, from[1], color, to[0] + offset, to[1], color, z)
+        end
       end
+      [[path.first, path[1]], [path.last, path[-2]]].each do |endpoint, neighbor|
+        x, y = endpoint
+        dx = neighbor[0] - x
+        dy = neighbor[1] - y
+        magnitude = [Math.hypot(dx, dy), 1].max
+        Gosu.draw_line(x, y, COLORS[:white], x + dx / magnitude * 14, y + dy / magnitude * 14, COLORS[:white], z + 0.02)
+        draw_diamond(x, y, tile_width * 0.16, tile_height * 0.13, accent, z + 0.01)
+      end
+      pulse = point_on_path(path, (game_time % 1_600) / 1_600.0)
+      draw_diamond(pulse[0], pulse[1], 5, 3, COLORS[:white], z + 0.03)
     end
   end
 
@@ -635,11 +663,12 @@ class RaiBertWindow < Gosu::Window
   end
 
   def draw_platforms
-    { left: [3, -1], right: [3, 4] }.each do |side, position|
+    @game.board.rescues.each do |(origin, direction), side|
       next unless @game.rescues[side]
 
+      position = @game.board.fall_target(origin, direction)
       x, y = tile_center(position)
-      draw_object(:rescue, x, y + 10, 92, 3.2)
+      draw_object(:rescue, x, y + 10, [tile_width, 92].min, 3.2)
     end
   end
 
@@ -649,17 +678,18 @@ class RaiBertWindow < Gosu::Window
     pickup = @game.pickup
     destination = [pickup[:row], pickup[:column]]
     progress = pickup[:moved_at] ? [[(game_time - pickup[:moved_at]) / GameState::OBJECT_MOVE_TIME.to_f, 0].max, 1].min : 1
-    x, y = tile_center(interpolate(pickup[:from] || destination, destination, progress))
+    x, y = tile_center(motion_position(pickup, destination, progress))
     y += Math.sin(game_time / 220.0) * 4 - 4
-    POWERUP_STYLES.key?(pickup[:kind]) ? draw_powerup(pickup[:kind], x, y, 56, 3.5) : draw_object(pickup[:kind], x, y, 56, 3.5)
+    size = [tile_width * 0.62, 56].min
+    POWERUP_STYLES.key?(pickup[:kind]) ? draw_powerup(pickup[:kind], x, y, size, 3.5) : draw_object(pickup[:kind], x, y, size, 3.5)
   end
 
   def draw_enemies
     @game.enemies.each do |enemy|
       destination = [enemy[:row], enemy[:column]]
       progress = enemy[:moved_at] ? [[(game_time - enemy[:moved_at]) / GameState::OBJECT_MOVE_TIME.to_f, 0].max, 1].min : 1
-      x, y = tile_center(interpolate(enemy[:from] || destination, destination, progress))
-      draw_object(enemy[:kind], x, y + 6 + Math.sin(game_time / 170.0 + x) * 2, 65, 3.4)
+      x, y = tile_center(motion_position(enemy, destination, progress))
+      draw_object(enemy[:kind], x, y + 6 + Math.sin(game_time / 170.0 + x) * 2, [tile_width * 0.72, 65].min, 3.4)
     end
   end
 
@@ -675,7 +705,7 @@ class RaiBertWindow < Gosu::Window
         frame = [[elapsed * ROW_FRAMES.fetch(row) / DEATH_TIME, 0].max, ROW_FRAMES.fetch(row) - 1].min
       else
         elapsed -= DEATH_TIME
-        position = [0, 0]
+        position = @game.board.start
         row = 6
         frame = [[elapsed * ROW_FRAMES.fetch(row) / RESPAWN_TIME, 0].max, ROW_FRAMES.fetch(row) - 1].min
       end
@@ -698,7 +728,7 @@ class RaiBertWindow < Gosu::Window
     y -= Math.sin(jump_progress * Math::PI) * 34 if jump_progress
     image = sprite(@character, row, frame)
     alpha = @game.invulnerable?(now) && (now / 100).even? ? Gosu::Color.new(0x66_ffffff) : Gosu::Color::WHITE
-    scale = @character == :voxel ? 0.34 : 0.32
+    scale = (@character == :voxel ? 0.34 : 0.32) * [tile_width / TILE_WIDTH.to_f, 1].min
     image.draw(x - 96 * scale, y - 180 * scale, 4, scale, scale, alpha)
   end
 
@@ -707,11 +737,31 @@ class RaiBertWindow < Gosu::Window
       if t < 0.5
         interpolate(@hop[:from], @hop[:target], t * 2)
       else
-        interpolate(@hop[:target], [0, 0], (t - 0.5) * 2)
+        interpolate(@hop[:target], @game.board.start, (t - 0.5) * 2)
       end
+    elsif @hop[:path]
+      point_on_path(@hop[:path], t)
     else
       interpolate(@hop[:from], @hop[:target], t)
     end
+  end
+
+  def motion_position(entity, destination, progress)
+    path = entity[:path] || entity[:connection]&.path || entity.dig(:motion, :path) || entity.dig(:motion, :connection)&.path
+    path ? point_on_path(path, progress) : interpolate(entity[:from] || destination, destination, progress)
+  end
+
+  def point_on_path(path, amount)
+    return path.first if path.length < 2
+
+    lengths = path.each_cons(2).map { |from, to| Math.hypot(to[0] - from[0], to[1] - from[1]) }
+    remaining = lengths.sum * amount
+    path.each_cons(2).zip(lengths).each do |(from, to), length|
+      return interpolate(from, to, length.zero? ? 1 : remaining / length) if remaining <= length
+
+      remaining -= length
+    end
+    path.last
   end
 
   def interpolate(from, to, amount)
@@ -720,7 +770,9 @@ class RaiBertWindow < Gosu::Window
 
   def tile_center(position)
     row, column = position
-    [viewport_width / 2 + (column - row / 2.0) * tile_width, pyramid_top + row * row_step]
+    metrics = board_metrics
+    [metrics[:left] + (column - row / 2.0 - metrics[:min_x]) * tile_width,
+     metrics[:top] + (row - metrics[:min_y]) * row_step]
   end
 
   def sprite(character, row, column)
@@ -773,14 +825,32 @@ class RaiBertWindow < Gosu::Window
   def viewport_width = @viewport_width || WIDTH
   def viewport_height = @viewport_height || HEIGHT
   def portrait? = viewport_height > viewport_width
-  def tile_width = portrait? ? viewport_width * 0.92 / GameState::ROWS : TILE_WIDTH
-  def tile_height = portrait? ? tile_width * 0.51 : TILE_HEIGHT
-  def pyramid_top = portrait? ? 190 : PYRAMID_TOP
+  def tile_width = board_metrics[:tile_width]
+  def tile_height = tile_width * 0.51
+  def pyramid_top = board_metrics[:top]
 
   def row_step
-    return ROW_STEP unless portrait?
+    tile_width * 0.76
+  end
 
-    [(viewport_height - pyramid_top - 80) / (GameState::ROWS - 1).to_f, tile_width * 1.42].min
+  def board_metrics
+    return { tile_width: TILE_WIDTH, min_x: 0, min_y: 0, left: viewport_width / 2.0, top: PYRAMID_TOP } unless @game
+
+    min_x, max_x, min_y, max_y = @game.board.projected_bounds
+    top_limit = portrait? ? 158 : 118
+    bottom_limit = portrait? ? 28 : 86
+    available_width = viewport_width - (portrait? ? 28 : 80)
+    available_height = viewport_height - top_limit - bottom_limit
+    width_units = max_x - min_x + 1.15
+    height_units = (max_y - min_y) * 0.76 + 1.15
+    width = [TILE_WIDTH, available_width / width_units, available_height / height_units].min
+    rendered_width = (max_x - min_x) * width
+    rendered_height = (max_y - min_y) * width * 0.76
+    {
+      tile_width: width, min_x: min_x, min_y: min_y,
+      left: (viewport_width - rendered_width) / 2.0,
+      top: top_limit + (available_height - rendered_height) / 2.0
+    }
   end
 
   def apply_browser_preferences
