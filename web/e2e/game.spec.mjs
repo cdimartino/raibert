@@ -100,7 +100,7 @@ test("qualifying players can type and submit leaderboard initials", async ({ pag
       highScore: 100,
       rank: 1,
       entry: { id: "new-entry" },
-      entries: [{ id: "new-entry", rank: 1, initials: "RAI", score: 100, stage: 1, difficulty: "normal", outcome: "game_over" }]
+      entries: [{ id: "new-entry", rank: 1, initials: "RAI", score: "0.1e3", stage: "0.1e1", difficulty: "normal", outcome: "game_over" }]
     } });
   });
 
@@ -115,6 +115,8 @@ test("qualifying players can type and submit leaderboard initials", async ({ pag
   await expect(initials).toHaveValue("RAI");
   await page.getByRole("button", { name: "Submit score" }).click();
   await expect(page.getByText("Accepted at rank 1.")).toBeVisible();
+  await expect(page.locator("#leaderboard-rows tr").first().locator("td").nth(2)).toHaveText("100");
+  await expect(page.locator("#leaderboard-rows tr").first().locator("td").nth(3)).toHaveText("1");
   expect(submission).toMatchObject({ initials: "RAI", score: 100, stage: 1, difficulty: "normal", outcome: "game_over" });
   expect(payloadHash).toBe(createHash("sha256").update(JSON.stringify(submission)).digest("hex"));
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("raibert.settings.v1")).initials)).toBe("RAI");

@@ -1,4 +1,7 @@
+import { createAnalytics } from "./analytics.js";
 import { classifyGameplaySwipe, menuPrimaryAction } from "./input.js";
+
+const analytics = createAnalytics();
 
 const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d", { alpha: false });
@@ -254,6 +257,7 @@ function dispatchAction(action) {
   if (gameState.screen === "select" && action === "confirm") gameState = { ...gameState, screen: "game", status: "playing" };
   else if (gameState.screen === "game" && ["game_over", "victory"].includes(gameState.status) && action === "confirm") gameState = { ...gameState, status: "playing", paused: false };
   else if (gameState.screen === "game" && gameState.status === "playing" && action === "pause") gameState = { ...gameState, paused: !gameState.paused };
+  analytics.state(gameState);
 }
 
 function browserKey(event) {
@@ -334,6 +338,8 @@ globalThis.RaiBertWeb = {
     audio.stopSong();
   },
   fail(message) {
+    analytics.track("runtime_error");
+    analytics.state({ screen: "error" });
     status.hidden = false;
     status.textContent = `Rai*bert stopped: ${message}`;
     console.error(message);
@@ -351,6 +357,7 @@ globalThis.RaiBertWeb = {
   publishGameState(json) {
     const previous = gameState;
     gameState = JSON.parse(String(json));
+    analytics.state(gameState);
     if (menuDialog.open) updateMenuPrimaryAction();
     if (!["game_over", "victory"].includes(previous.status) && ["game_over", "victory"].includes(gameState.status)) {
       pendingRun = { runId: crypto.randomUUID(), score: gameState.score, stage: gameState.stage, difficulty: gameState.difficulty, outcome: gameState.status };
@@ -475,7 +482,7 @@ function renderLeaderboard(board, highlightId) {
   (board.entries || []).forEach((entry, index) => {
     const row = document.createElement("tr"); row.style.setProperty("--row", index);
     if (entry.id === highlightId) row.classList.add("new-entry");
-    for (const value of [entry.rank || index+1, entry.initials, Number(entry.score).toLocaleString("en-US"), entry.stage, entry.difficulty, entry.outcome.replace("_", " ")]) { const cell=document.createElement("td"); cell.textContent=value; row.append(cell); }
+    for (const value of [entry.rank || index+1, entry.initials, Number(entry.score).toLocaleString("en-US"), Number(entry.stage), entry.difficulty, entry.outcome.replace("_", " ")]) { const cell=document.createElement("td"); cell.textContent=value; row.append(cell); }
     rows.append(row);
   });
   animateWorldScore(board.highScore ?? null);

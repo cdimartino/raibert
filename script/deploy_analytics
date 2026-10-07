@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+STACK_NAME="${STACK_NAME:-raibert-prod}"
+AWS_REGION="${AWS_REGION:-us-east-1}"
+: "${AWS_PROFILE:?Set AWS_PROFILE to an authenticated administrator profile}"
+
+identity_arn="$(aws sts get-caller-identity --query Arn --output text)"
+if [[ "$identity_arn" == *":root" ]]; then
+  echo "Refusing to deploy with a root identity." >&2
+  exit 1
+fi
+
+workspace="$(mktemp -d)"
+trap 'rm -rf "$workspace"' EXIT
+aws cloudformation get-template --region "$AWS_REGION" --stack-name "$STACK_NAME" \
+  --template-stage Original --query TemplateBody --output json > "$workspace/current.json"
+aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" \
+  --query 'Stacks[0].Parameters' --output json > "$workspace/parameters.json"
+
+distribution_id="$(aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" \
+  --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue | [0]" --output text)"
+aws cloudfront get-distribution-config --id "$distribution_id" \
+  --query DistributionConfig --output json > "$workspace/distribution.json"
+
+# Reuse the deployed leaderboard code and its artifact bucket. Only package the
+# new analytics function; the site bucket is unsuitable because sync uses --delete.
+artifact_bucket="$(ruby -rjson -ryaml -ruri -e '
+  raw = JSON.parse(File.read(ARGV.fetch(0)))
+  current = raw.is_a?(String) ? YAML.safe_load(raw) : raw
+  code = current.fetch("Resources").fetch("LeaderboardFunction").fetch("Properties").fetch("CodeUri")
+  abort "Expected an S3 leaderboard CodeUri" unless code.is_a?(String) && code.start_with?("s3://")
+  source = File.read(ARGV.fetch(1))
+  current.fetch("Resources").each do |name, resource|
+    next unless resource["Metadata"]
+    marker = "  #{name}:\n"
+    metadata = "    Metadata: #{resource["Metadata"].to_json}\n"
+    source = source.sub(marker, marker + metadata)
+  end
+  source = source.sub("CodeUri: ../leaderboard/", "CodeUri: #{code.to_json}")
+  source = source.sub("CodeUri: ../analytics/", "CodeUri: #{File.join(ARGV.fetch(2), "analytics").to_json}")
+  distribution = JSON.parse(File.read(ARGV.fetch(6)))
+  origins = distribution.fetch("Origins").fetch("Items")
+  domain = origins.find { |o| o.fetch("Id") == "leaderboard-function" }.fetch("DomainName")
+  abort "Invalid deployed leaderboard origin" unless domain.match?(/\A[a-z0-9-]+\.lambda-url\.[a-z0-9-]+\.on\.aws\z/)
+  # Retain resolved attributes of existing origins, WAF and redirect function.
+  # CloudFront exposes these values through the already-authorized read API.
+  preserved = {
+    %q{DomainName: !Select [2, !Split ["/", !GetAtt LeaderboardFunctionUrl.FunctionUrl]]} => ["DomainName", domain],
+    "WebACLId: !GetAtt LeaderboardWebAcl.Arn" => ["WebACLId", distribution.fetch("WebACLId")],
+    "DomainName: !GetAtt SiteBucket.RegionalDomainName" => ["DomainName", origins.find { |o| o.fetch("Id") == "site-bucket" }.fetch("DomainName")],
+    "FunctionARN: !GetAtt CanonicalRedirectFunction.FunctionARN" => ["FunctionARN", distribution.fetch("DefaultCacheBehavior").fetch("FunctionAssociations").fetch("Items").find { |f| f.fetch("EventType") == "viewer-request" }.fetch("FunctionARN")]
+  }
+  preserved.each do |placeholder, (key, value)|
+    abort "Existing distribution attribute missing: #{key}" unless value.is_a?(String) && !value.empty?
+    abort "Distribution placeholder missing: #{placeholder}" unless source.include?(placeholder)
+    source = source.sub(placeholder, "#{key}: #{value.to_json}")
+  end
+  File.write(ARGV.fetch(3), source)
+  parameters = JSON.parse(File.read(ARGV.fetch(4))).map { |p| { "ParameterKey" => p.fetch("ParameterKey"), "UsePreviousValue" => true } }
+  File.write(ARGV.fetch(5), JSON.generate(parameters))
+  puts URI.parse(code).host
+' "$workspace/current.json" "$ROOT/infra/site.yml" "$ROOT" "$workspace/source.yml" \
+  "$workspace/parameters.json" "$workspace/previous-parameters.json" "$workspace/distribution.json")"
+artifact_bucket="${ARTIFACT_BUCKET:-$artifact_bucket}"
+aws cloudformation package --region "$AWS_REGION" \
+  --template-file "$workspace/source.yml" --s3-bucket "$artifact_bucket" \
+  --s3-prefix raibert --output-template-file "$workspace/packaged.yml"
+
+change_set_name="$STACK_NAME-analytics-$(date -u +%Y%m%d%H%M%S)-$$"
+change_set="$(aws cloudformation create-change-set --region "$AWS_REGION" \
+  --stack-name "$STACK_NAME" --change-set-name "$change_set_name" --change-set-type UPDATE \
+  --template-body "file://$workspace/packaged.yml" --capabilities CAPABILITY_NAMED_IAM \
+  --parameters "file://$workspace/previous-parameters.json" --query Id --output text)"
+echo "Change set: $change_set"
+aws cloudformation wait change-set-create-complete --region "$AWS_REGION" \
+  --change-set-name "$change_set" || true
+aws cloudformation describe-change-set --region "$AWS_REGION" \
+  --change-set-name "$change_set" --output json > "$workspace/changes.json"
+# Exit 10 means there are no infrastructure updates, so only deploy the client.
+review_status=0
+ruby -rjson -e '
+  change = JSON.parse(File.read(ARGV.fetch(0)))
+  if change["Status"] == "FAILED" && change["StatusReason"].to_s.include?("didn\u0027t contain changes")
+    puts "Infrastructure is already up to date."
+    exit 10
+  end
+  unless change.fetch("Status") == "CREATE_COMPLETE" && change.fetch("ExecutionStatus") == "AVAILABLE"
+    abort "No executable change set: #{change["StatusReason"]}"
+  end
+  change.fetch("Changes").each do |entry|
+    resource = entry.fetch("ResourceChange")
+    puts "#{resource["Action"]}: #{resource["LogicalResourceId"]} (replacement: #{resource["Replacement"] || "none"})"
+    if resource["Action"] == "Remove" || %w[True Conditional].include?(resource["Replacement"])
+      abort "Refusing removal or potential replacement; review the change set in AWS."
+    end
+  end
+' "$workspace/changes.json" || review_status=$?
+if [ "$review_status" = 0 ]; then
+  aws cloudformation execute-change-set --region "$AWS_REGION" --change-set-name "$change_set"
+  aws cloudformation wait stack-update-complete --region "$AWS_REGION" --stack-name "$STACK_NAME"
+elif [ "$review_status" != 10 ]; then
+  exit "$review_status"
+fi
+
+"$ROOT/script/package_site" "$workspace/site"
+AWS_REGION="$AWS_REGION" STACK_NAME="$STACK_NAME" "$ROOT/script/deploy_site" "$workspace/site"
+aws cloudformation describe-stacks --region "$AWS_REGION" --stack-name "$STACK_NAME" \
+  --query "Stacks[0].Outputs[?OutputKey=='UsageDashboardUrl'].OutputValue | [0]" --output text

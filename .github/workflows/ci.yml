@@ -41,6 +41,9 @@ jobs:
       - name: Test leaderboard ranking and validation domain
         run: ruby test/leaderboard_test.rb
 
+      - name: Test analytics collector
+        run: ruby test/analytics_test.rb
+
       - name: Run browser shim and HTTP integration tests
         run: |
           ruby test/web_shim_test.rb
@@ -89,7 +92,9 @@ jobs:
         run: script/build_web
 
       - name: Run Web Audio unit tests
-        run: npm --prefix web test
+        run: |
+          npm --prefix web test
+          node test/analytics_test.mjs
 
       - name: Run Chromium end-to-end tests
         run: npm --prefix web run test:e2e

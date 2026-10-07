@@ -89,3 +89,7 @@ CI enforces 100% executable-line coverage for `GameState`, the board-layout mode
 ## Credits and license
 
 Rai character artwork is derived from `rai-pets-v2.zip`. Game art prompts are preserved in `assets/art/PROMPTS.md`. The Level 1 silhouette is adapted from the [Ruby logo](https://www.ruby-lang.org/en/about/logo/), copyright Yukihiro Matsumoto, licensed under [CC BY-SA 2.5](https://creativecommons.org/licenses/by-sa/2.5/); the distributed notice contains the full attribution. Higher-level impossible boards are original compositions. Rai*bert uses [Gosu](https://www.libgosu.org/), CRuby, and ruby.wasm and is released under the [MIT License](LICENSE).
+
+## Site activity
+
+The private AWS CloudWatch `raibert-prod-usage` dashboard reports visits, browser sessions, gameplay starts and outcomes, active play time, and runtime errors. See [analytics access and deployment](docs/deployment.md#visitor-and-gameplay-analytics) for setup and counting details.
