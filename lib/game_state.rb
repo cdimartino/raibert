@@ -202,6 +202,10 @@ class GameState
   end
 
   def lose_life(now)
+    # A final-tile collision is resolved after the tile awards its bonuses.
+    @score -= @last_stage_bonus[:clean]
+    @score_bonuses[:clean] -= @last_stage_bonus[:clean]
+    @last_stage_bonus[:clean] = 0
     @stage_deaths += 1
     @lives -= 1
     @player = @board.start.dup

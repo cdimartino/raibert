@@ -52,3 +52,16 @@ game.tiles[destination] = 0
 game.send(:step_enemy, regression, 2_000)
 scoring_assert(game.tiles[destination].zero?, 'regression never lowers progress below zero')
 puts 'Speed, clean-stage scoring, retry and regression-enemy checks passed'
+
+[1, GameState::LEVEL_COUNT].each do |level|
+  final_hit = GameState.new(start_level: level)
+  direction, destination = final_hit.neighbors.first
+  final_hit.tiles.each_key { |tile| final_hit.tiles[tile] = final_hit.target }
+  final_hit.tiles[destination] = final_hit.target - 1
+  final_hit.instance_variable_set(:@invulnerable_until, 0)
+  final_hit.enemies << { kind: :bug, row: destination[0], column: destination[1], next_at: 99_999 }
+  scoring_assert(final_hit.move(direction, 2_000) == :hit && final_hit.lives == 2, 'final tile can coincide with a collision')
+  scoring_assert(final_hit.last_stage_bonus[:clean].zero? && final_hit.score_bonuses[:clean].zero?, 'final-tile collision forfeits clean bonus, including victory')
+  scoring_assert(final_hit.score == 200 + 1_000 * level + final_hit.last_stage_bonus[:speed], 'only base rewards and earned speed bonus remain')
+end
+puts 'Simultaneous stage completion and collision scoring passed'
