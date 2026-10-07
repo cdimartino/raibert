@@ -129,7 +129,7 @@ test("leaderboard is keyboard accessible and survives an offline refresh", async
   await expect(page.getByText("The board is empty. Be first.")).toBeVisible();
   await page.unroute("**/api/leaderboard");
   await page.route("**/api/leaderboard", route => route.abort());
-  await page.getByRole("button", { name: "Retry" }).click();
+  await page.getByRole("button", { name: "Refresh scores" }).click();
   await expect(page.getByText(/cached scores/)).toBeVisible();
   await page.getByRole("button", { name: "Close" }).last().click();
   await expect(page.locator("#game")).toBeFocused();

@@ -36,9 +36,15 @@ Land on every tile until the board is green. Each stage introduces a different b
 | Pause / back | Escape |
 | Options / mute / leaderboard | `O` / `M` / `L` |
 
+Open controls with `O` on the selection screen or while paused. Remap each direction, choose the optional diamond preset (`Q`/`R` above `S`/`D`), or reset to defaults. Movement can reuse selection keys, while gameplay shortcuts remain reserved. Browser bindings persist across reloads.
+
+Gold marks and arrows show each rescue ship’s exact launch tile and direction. Follow that arrow; jumping toward the same ship from another tile can still cause a fall. Each ship works once per stage and returns you to the board’s start.
+
 ### Mobile
 
 Swipe diagonally to hop. On the selection screen, swipe horizontally for a character, vertically for difficulty, and tap to start. Tap during play to pause; hold on selection to open the menu. A compact draggable D-pad is available from the menu and is hidden by default.
+
+After a loss or victory, the result panel shows your final score and stage. **Play again** starts a fresh run and skips any unsubmitted score. **Refresh scores** only reloads the leaderboard.
 
 ## Worldwide leaderboard
 

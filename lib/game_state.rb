@@ -99,6 +99,11 @@ class GameState
     end
     return unless @status == :playing
 
+    # A completed hop is history. During idle time the player occupies the
+    # landing tile; sweep only the interval since the last collision check.
+    if @player_motion
+      @player_motion = { from: @player, to: @player, started_at: @player_motion[:ended_at], ended_at: now }
+    end
     spawn_pickup(now)
     step_pickup(now)
     collected = collect_pickup(now, motion: @player_motion)

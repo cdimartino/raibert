@@ -105,9 +105,17 @@ class RaiBertWindow < Gosu::Window
     up_left up_right down_left down_right select_left select_right select_up select_down confirm options pause mute
   ].freeze
   MOVE_ACTIONS = %i[up_left up_right down_left down_right].freeze
+  OPTIONS_ACTIONS = (MOVE_ACTIONS + %i[diamond_preset reset_controls]).freeze
+  DIAMOND_CONTROLS = { up_left: ["q"], up_right: ["r"], down_left: ["s"], down_right: ["d"] }.freeze
+  CONTROL_CONTEXTS = {
+    select: %i[select_left select_right select_up select_down confirm options pause mute],
+    options: %i[select_left select_right select_up select_down confirm options pause mute],
+    game: (MOVE_ACTIONS + %i[confirm options pause mute])
+  }.freeze
   MOVE_LABELS = {
     up_left: "UP-LEFT", up_right: "UP-RIGHT", down_left: "DOWN-LEFT", down_right: "DOWN-RIGHT"
   }.freeze
+  MOVE_ARROWS = { up_left: "↖", up_right: "↗", down_left: "↙", down_right: "↘" }.freeze
   KEY_ALIASES = { "enter" => "return", "esc" => "escape" }.freeze
   EFFECTS = %i[select start hop land tile debugger gc life shield patch rescue stage_clear victory fall hit].freeze
 
@@ -157,6 +165,7 @@ class RaiBertWindow < Gosu::Window
     @world_score = nil
     @last_published_state = nil
     apply_browser_preferences
+    save_browser_preferences
   end
 
   def needs_cursor?
@@ -297,6 +306,7 @@ class RaiBertWindow < Gosu::Window
       @flash_until = 0
       play_level_music
       play(:start)
+      publish_browser_state(force: true)
       return
     end
 
@@ -325,14 +335,28 @@ class RaiBertWindow < Gosu::Window
     end
 
     if pressed?(:select_up, key) || pressed?(:select_left, key)
-      @options_selection = (@options_selection - 1) % MOVE_ACTIONS.length
+      @options_selection = (@options_selection - 1) % OPTIONS_ACTIONS.length
       play(:select)
     elsif pressed?(:select_down, key) || pressed?(:select_right, key)
-      @options_selection = (@options_selection + 1) % MOVE_ACTIONS.length
+      @options_selection = (@options_selection + 1) % OPTIONS_ACTIONS.length
       play(:select)
     elsif pressed?(:confirm, key)
-      @rebinding_action = MOVE_ACTIONS.fetch(@options_selection)
-      @options_message = "PRESS NEW KEY  //  ESC CANCELS"
+      action = OPTIONS_ACTIONS.fetch(@options_selection)
+      if action == :diamond_preset
+        DIAMOND_CONTROLS.each do |move, names|
+          @control_names[move] = names.dup
+          @controls[move] = names.map { |name| key_id(name) }
+        end
+        @options_message = "DIAMOND PRESET APPLIED"
+        save_browser_preferences
+      elsif action == :reset_controls
+        load_controls
+        @options_message = "DEFAULT CONTROLS RESTORED"
+        save_browser_preferences
+      else
+        @rebinding_action = action
+        @options_message = "PRESS NEW KEY; ESC CANCELS"
+      end
     elsif pressed?(:pause, key) || pressed?(:options, key)
       @screen = @options_return_screen
       @rebinding_action = nil
@@ -342,7 +366,7 @@ class RaiBertWindow < Gosu::Window
 
   def bind_movement_key(action, key)
     name = key_name(key)
-    unavailable = @controls.reject { |other, _keys| other == action }.values.flatten.include?(key)
+    unavailable = conflicting_binding?(action, key)
     if name.nil? || unavailable
       @options_message = unavailable ? "KEY ALREADY IN USE" : "KEY NOT SUPPORTED"
       return
@@ -354,6 +378,16 @@ class RaiBertWindow < Gosu::Window
     @options_message = "#{MOVE_LABELS.fetch(action)} = #{name.upcase}"
     play(:select)
     save_browser_preferences
+  end
+
+  def conflicting_binding?(action, key, controls = @controls)
+    # L opens the browser leaderboard before Ruby sees the key.
+    return true if Gosu.respond_to?(:browser_preferences) && key == key_id("l")
+
+    controls.any? do |other, keys|
+      other != action && keys.include?(key) &&
+        CONTROL_CONTEXTS.values.any? { |actions| actions.include?(action) && actions.include?(other) }
+    end
   end
 
   def start_game
@@ -524,34 +558,43 @@ class RaiBertWindow < Gosu::Window
     end
 
     difficulty = GameState::DIFFICULTIES.fetch(DIFFICULTY_KEYS.fetch(@difficulty_selection))
-    base_y = portrait? ? [viewport_height - 230, 610].max : 590
-    center_text(@font, "#{portrait? ? 'SWIPE UP / DOWN' : "#{binding_label(:select_up)} / #{binding_label(:select_down)}"}  DIFFICULTY: #{difficulty[:label]}", viewport_width / 2, base_y, 4, accent)
-    center_text(@small_font, difficulty[:note].upcase, viewport_width / 2, base_y + 28, 4, COLORS[:muted])
-    choose = portrait? ? "SWIPE TO CHOOSE  //  TAP TO BOOT  //  HOLD FOR MENU" : "#{binding_label(:select_left)} / #{binding_label(:select_right)} TO CHOOSE  //  #{binding_label(:confirm)} TO BOOT"
-    center_text(@font, choose, viewport_width / 2, base_y + 70, 4, COLORS[:white])
-    move_keys = GameState::DIRECTIONS.keys.flat_map { |action| @control_names.fetch(action) }.uniq.map(&:upcase).join(" ")
-    center_text(@small_font, "MOVE #{move_keys}  |  #{binding_label(:options)} options  |  #{binding_label(:pause)} pause  |  #{binding_label(:mute)} mute", viewport_width / 2, base_y + 118, 4, COLORS[:muted]) unless portrait?
+    base_y = portrait? ? [viewport_height - 225, 600].max : 590
+    choose = portrait? ? "Swipe left or right" : "#{binding_label(:select_left)}; #{binding_label(:select_right)}"
+    change = portrait? ? "Swipe up or down" : "#{binding_label(:select_up)}; #{binding_label(:select_down)}"
+    center_text(@font, "Choose character: #{choose}", viewport_width / 2, base_y, 4, COLORS[:white])
+    center_text(@font, "Change difficulty: #{change}", viewport_width / 2, base_y + 30, 4, COLORS[:white])
+    center_text(@small_font, "#{difficulty[:label]}: #{difficulty[:note].gsub(' // ', ' — ')}", viewport_width / 2, base_y + 58, 4, accent)
+    center_text(@font, "Start game: #{portrait? ? 'Tap' : binding_label(:confirm)}", viewport_width / 2, base_y + 88, 4, COLORS[:green])
+    help = portrait? ? "Menu: hold" : "Controls: #{binding_label(:options)}   Pause: #{binding_label(:pause)}   Mute: #{binding_label(:mute)}"
+    center_text(@small_font, help, viewport_width / 2, base_y + 124, 4, COLORS[:muted])
   end
 
   def draw_options
     center_text(@title_font, "OPTIONS", viewport_width / 2, 72, 4, COLORS[:white])
-    center_text(@small_font, "CHOOSE A DIRECTION, THEN PRESS ENTER", viewport_width / 2, 142, 4, COLORS[:muted])
+    center_text(@small_font, "Choose a direction, then #{binding_label(:confirm)} to change", viewport_width / 2, 132, 4, COLORS[:muted])
+    center_text(@font, "#{binding_label(:up_left)} ↖      ↗ #{binding_label(:up_right)}", viewport_width / 2, 164, 4, COLORS[:green])
+    center_text(@font, "#{binding_label(:down_left)} ↙      ↘ #{binding_label(:down_right)}", viewport_width / 2, 191, 4, COLORS[:green])
 
-    MOVE_ACTIONS.each_with_index do |action, index|
+    OPTIONS_ACTIONS.each_with_index do |action, index|
       selected = index == @options_selection
-      y = 220 + index * 82
+      y = 236 + index * 52
       color = selected ? COLORS[:green] : COLORS[:muted]
       left = viewport_width / 2 - 230
-      Gosu.draw_rect(left, y, 460, 56, COLORS[:panel], 2)
-      draw_border(left, y, 460, 56, color, 3)
-      @font.draw_text(selected ? ">" : " ", left + 22, y + 16, 4, 1, 1, color)
-      @font.draw_text(MOVE_LABELS.fetch(action), left + 60, y + 16, 4, 1, 1, COLORS[:white])
-      @font.draw_text(binding_label(action), left + 380, y + 16, 4, 1, 1, color)
+      Gosu.draw_rect(left, y, 460, 46, COLORS[:panel], 2)
+      draw_border(left, y, 460, 46, color, 3)
+      @font.draw_text(selected ? ">" : " ", left + 22, y + 12, 4, 1, 1, color)
+      label = MOVE_LABELS[action] || (action == :diamond_preset ? "PRESET: Q R above S D" : "RESET DEFAULT CONTROLS")
+      @font.draw_text(label, left + 60, y + 12, 4, 1, 1, COLORS[:white])
+      if MOVE_ACTIONS.include?(action)
+        binding = binding_label(action)
+        scale = [1.0, 118.0 / [@small_font.text_width(binding), 1].max].min
+        @small_font.draw_text(binding, left + 330, y + 14, 4, scale, scale, color)
+      end
     end
 
     prompt = @rebinding_action ? "PRESS NEW KEY FOR #{MOVE_LABELS.fetch(@rebinding_action)}" : @options_message
     center_text(@font, prompt.to_s, viewport_width / 2, 580, 4, COLORS[:amber])
-    center_text(@small_font, "ARROWS MOVE  //  ENTER CHANGE  //  ESC BACK", viewport_width / 2, 654, 4, COLORS[:muted])
+    center_text(@small_font, "Arrow keys: choose   #{binding_label(:confirm)}: apply   #{binding_label(:pause)}: back", viewport_width / 2, 654, 4, COLORS[:muted])
   end
 
   def draw_game
@@ -596,8 +639,11 @@ class RaiBertWindow < Gosu::Window
     legend = controls.map { |action, label| "#{binding_label(action)} #{label}" }.join("    ")
     unless portrait?
       Gosu.draw_rect(16, viewport_height - 70, viewport_width - 32, 60, 0xe609101e, 4.9)
-      center_text(@small_font, THEMES[theme_index][:name], viewport_width / 2, viewport_height - 61, 5, accent)
-      center_text(@small_font, legend, viewport_width / 2, viewport_height - 36, 5, COLORS[:muted])
+      center_text(@small_font, THEMES[theme_index][:name], viewport_width / 2, viewport_height - 65, 5, accent)
+      center_text(@small_font, legend, viewport_width / 2, viewport_height - 46, 5, COLORS[:muted])
+    end
+    if @game.rescues.values.any?
+      center_text(@small_font, "RESCUE: jump from the gold mark along its arrow", viewport_width / 2, viewport_height - 25, 5, COLORS[:amber])
     end
     Gosu.draw_rect(130, 61, 220, 5, 0xff263444, 5)
     Gosu.draw_rect(130, 61, 220 * fixed / @game.tiles.length.to_f, 5, accent, 5.1)
@@ -669,6 +715,26 @@ class RaiBertWindow < Gosu::Window
       position = @game.board.fall_target(origin, direction)
       x, y = tile_center(position)
       draw_object(:rescue, x, y + 10, [tile_width, 92].min, 3.2)
+      origin_x, origin_y = tile_center(origin)
+      dx, dy = x - origin_x, y - origin_y
+      length = Math.hypot(dx, dy)
+      ux, uy = dx / length, dy / length
+      start_x, start_y = origin_x + dx * 0.18, origin_y + dy * 0.18
+      tip_x, tip_y = origin_x + dx * 0.65, origin_y + dy * 0.65
+      draw_diamond(start_x, start_y, 7, 5, COLORS[:amber], 4.2)
+      [-1, 0, 1].each do |offset|
+        Gosu.draw_line(start_x - uy * offset, start_y + ux * offset, COLORS[:amber],
+                       tip_x - uy * offset, tip_y + ux * offset, COLORS[:amber], 4.2)
+      end
+      [-1, 1].each do |sign|
+        Gosu.draw_line(tip_x, tip_y, COLORS[:amber],
+                       tip_x - ux * 12 + uy * 7 * sign, tip_y - uy * 12 - ux * 7 * sign, COLORS[:amber], 4.2)
+      end
+      label = "#{MOVE_ARROWS.fetch(direction)} #{portrait? ? 'SWIPE' : binding_label(direction)}"
+      width = [@small_font.text_width(label) + 12, viewport_width - 16].min
+      label_x = x.clamp(width / 2 + 8, viewport_width - width / 2 - 8)
+      Gosu.draw_rect(label_x - width / 2, y + 36, width, 22, COLORS[:panel], 4.2)
+      center_text(@small_font, label, label_x, y + 39, 4.3, COLORS[:amber])
     end
   end
 
@@ -837,6 +903,13 @@ class RaiBertWindow < Gosu::Window
     return { tile_width: TILE_WIDTH, min_x: 0, min_y: 0, left: viewport_width / 2.0, top: PYRAMID_TOP } unless @game
 
     min_x, max_x, min_y, max_y = @game.board.projected_bounds
+    # Ships occupy off-board destinations; reserve their space as well as tiles.
+    @game.board.rescues.each_key do |origin, direction|
+      row, column = @game.board.fall_target(origin, direction)
+      x = column - row / 2.0
+      min_x, max_x = [min_x, x].min, [max_x, x].max
+      min_y, max_y = [min_y, row].min, [max_y, row].max
+    end
     top_limit = portrait? ? 158 : 118
     bottom_limit = portrait? ? 28 : 86
     available_width = viewport_width - (portrait? ? 28 : 80)
@@ -862,15 +935,21 @@ class RaiBertWindow < Gosu::Window
     difficulty = settings["difficulty"]&.to_sym
     @difficulty_selection = DIFFICULTY_KEYS.index(difficulty) if DIFFICULTY_KEYS.include?(difficulty)
     if settings["controls"].is_a?(Hash)
+      proposed_controls = @controls.dup
+      proposed_names = @control_names.dup
       settings["controls"].each do |action, names|
         action = action.to_sym
         next unless MOVE_ACTIONS.include?(action) && names.is_a?(Array) && names.all? { |name| name.is_a?(String) }
 
         keys = names.filter_map { |name| key_id(name.downcase) rescue nil }
-        next if keys.empty?
+        next if keys.empty? || keys.length != names.length
 
-        @control_names[action] = names.map(&:downcase)
-        @controls[action] = keys
+        proposed_names[action] = names.map(&:downcase)
+        proposed_controls[action] = keys
+      end
+      if MOVE_ACTIONS.all? { |action| proposed_controls.fetch(action).none? { |key| conflicting_binding?(action, key, proposed_controls) } }
+        @control_names = proposed_names
+        @controls = proposed_controls
       end
     end
   rescue StandardError
@@ -888,7 +967,7 @@ class RaiBertWindow < Gosu::Window
   def publish_browser_state(force: false)
     return unless @game && Gosu.respond_to?(:publish_game_state)
 
-    state = { screen: @screen, status: @game.status, score: @game.score, stage: @game.stage,
+    state = { screen: @screen, status: @game.status, score: @game.score, stage: @game.stage, lives: @game.lives,
               difficulty: @game.difficulty, paused: @paused }
     return if !force && state == @last_published_state
 
@@ -904,7 +983,9 @@ class RaiBertWindow < Gosu::Window
   end
 
   def center_text(font, text, x, y, z, color)
-    font.draw_text(text, x - font.text_width(text) / 2.0, y, z, 1, 1, color)
+    width = font.text_width(text)
+    scale = [1.0, (viewport_width - 32).to_f / [width, 1].max].min
+    font.draw_text(text, x - width * scale / 2.0, y, z, scale, scale, color)
   end
 
   def darken(color, factor)
@@ -953,7 +1034,7 @@ class RaiBertWindow < Gosu::Window
   end
 
   def binding_label(action)
-    @control_names.fetch(action).map(&:upcase).join("/")
+    @control_names.fetch(action).map { |name| KEY_ALIASES.fetch(name, name) == "return" ? "Enter" : name.tr("_", " ").upcase }.join(" or ")
   end
 end
 

@@ -133,6 +133,8 @@ hard_pressure = GameState.new(random: Random.new(1), now: 0, difficulty: :hard)
   normal_pressure.move(:down_right, 100 + index)
   hard_pressure.move(:down_right, 100 + index)
 end
+# This fixture measures spawn pressure, independently of contact/life loss.
+[normal_pressure, hard_pressure].each { |state| state.instance_variable_set(:@invulnerable_until, 20_000) }
 [3_200, 6_400, 9_600].each do |now|
   normal_pressure.tick(now)
   hard_pressure.tick(now)
