@@ -523,10 +523,28 @@ function renderLeaderboard(board, highlightId) {
   const rows = document.querySelector("#leaderboard-rows"); rows.replaceChildren();
   (board.entries || []).forEach((entry, index) => {
     const row = document.createElement("tr"); row.style.setProperty("--row", index);
+    row.dataset.rank = entry.rank || index + 1;
     if (entry.id === highlightId) row.classList.add("new-entry");
     for (const value of [entry.rank || index+1, entry.initials, Number(entry.score).toLocaleString("en-US"), Number(entry.stage), entry.difficulty, entry.outcome.replace("_", " ")]) { const cell=document.createElement("td"); cell.textContent=value; row.append(cell); }
     rows.append(row);
   });
+  if (!board.entries?.length) {
+    const row = document.createElement("tr");
+    row.className = "empty-board";
+    const cell = document.createElement("td");
+    cell.colSpan = 6;
+    const emblem = document.createElement("span");
+    emblem.className = "empty-emblem";
+    emblem.setAttribute("aria-hidden", "true");
+    emblem.textContent = "◇";
+    const title = document.createElement("strong");
+    title.textContent = "A place for your best run";
+    const hint = document.createElement("span");
+    hint.textContent = "Play fast. Climb the ranks.";
+    cell.append(emblem, title, hint);
+    row.append(cell);
+    rows.append(row);
+  }
   animateWorldScore(board.highScore ?? null);
 }
 function animateWorldScore(next) {
@@ -597,12 +615,29 @@ function showEnding() {
 endingDialog.querySelector("[data-view-scores]").addEventListener("click", finishEnding);
 endingDialog.addEventListener("cancel", event => { event.preventDefault(); finishEnding(); });
 
+function updateScoreActions() {
+  document.querySelector("[data-play-again]").hidden = !completedRun || Boolean(pendingRun);
+  document.querySelector("[data-play-again]").disabled = Boolean(pendingRun) || submittingRun;
+  document.querySelector("[data-submit-score]").hidden = !pendingRun || document.querySelector("#initials-form").hidden;
+  document.querySelector("[data-skip]").hidden = !pendingRun;
+}
 function renderRunResult() {
+  updateScoreActions();
   const run = ["game_over", "victory"].includes(gameState.status) ? completedRun : null;
   document.querySelector("#run-result").hidden = !run;
+
   if (!run) return;
   document.querySelector("#run-outcome").textContent = run.outcome === "victory" ? "Victory! All 20 stages cleared" : "Game over";
-  document.querySelector("#run-summary").textContent = `Final score: ${Number(run.score).toLocaleString("en-US")} · Stage ${run.stage} · ${run.difficulty} · Speed +${run.bonuses.speed || 0} · Clean +${run.bonuses.clean || 0}`;
+  const summary = document.querySelector("#run-summary");
+  summary.replaceChildren();
+  const score = document.createElement("strong");
+  score.textContent = Number(run.score).toLocaleString("en-US");
+  score.setAttribute("aria-label", `Final score: ${run.score}`);
+  const stage = document.createElement("span");
+  stage.textContent = `Stage ${run.stage} · ${run.difficulty}`;
+  const bonuses = document.createElement("small");
+  bonuses.textContent = `Speed +${run.bonuses.speed || 0} · Clean +${run.bonuses.clean || 0}`;
+  summary.append(score, stage, bonuses);
 }
 async function refreshLeaderboard(offerSubmission) {
   const request = ++leaderboardRequest;
@@ -618,12 +653,14 @@ async function refreshLeaderboard(offerSubmission) {
   } else if (offerSubmission && online && run) {
     document.querySelector("#leaderboard-status").textContent = "That run did not reach the current Top 15.";
   }
+  updateScoreActions();
 }
 async function openLeaderboard(offerSubmission) {
   if (menuDialog.open) menuDialog.close();
   if (gameState.screen === "game" && gameState.status === "playing" && !gameState.paused) { dispatchAction("pause"); leaderboardPausedGame = true; }
   renderRunResult();
   document.querySelector("#initials-form").hidden = true;
+  updateScoreActions();
   if (!leaderboardDialog.open) leaderboardDialog.showModal();
   updateFloatingControls();
   await refreshLeaderboard(offerSubmission);
@@ -631,7 +668,7 @@ async function openLeaderboard(offerSubmission) {
 leaderboardDialog.querySelectorAll("[data-close]").forEach(button => button.addEventListener("click", () => leaderboardDialog.close()));
 leaderboardDialog.querySelector("[data-retry]").addEventListener("click", () => refreshLeaderboard(Boolean(pendingRun)));
 leaderboardDialog.querySelector("[data-play-again]").addEventListener("click", () => {
-  if (submittingRun) return;
+  if (submittingRun || pendingRun) return;
   pendingRun = null;
   completedRun = null;
   leaderboardRequest++;
@@ -641,7 +678,13 @@ leaderboardDialog.querySelector("[data-play-again]").addEventListener("click", (
 });
 leaderboardDialog.addEventListener("cancel", event => { if (submittingRun) event.preventDefault(); });
 leaderboardDialog.addEventListener("close", () => { leaderboardRequest++; if (leaderboardPausedGame && resumableRun() && gameState.paused) dispatchAction("pause"); leaderboardPausedGame = false; updateFloatingControls(); canvas.focus(); });
-document.querySelector("[data-skip]").addEventListener("click", () => { document.querySelector("#initials-form").hidden = true; pendingRun = null; });
+document.querySelector("[data-skip]").addEventListener("click", () => {
+  document.querySelector("#initials-form").hidden = true;
+  pendingRun = null;
+  updateScoreActions();
+  document.querySelector("#leaderboard-status").textContent = "Score skipped. Ready for another run.";
+  document.querySelector("[data-play-again]").focus();
+});
 document.querySelector("#initials").addEventListener("input", event => { event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3); });
 document.querySelector("#initials-form").addEventListener("submit", async event => {
   event.preventDefault();
@@ -663,11 +706,13 @@ document.querySelector("#initials-form").addEventListener("submit", async event 
     document.querySelector("#initials-form").hidden = true;
     message.textContent = board.rank ? `Accepted at rank ${board.rank}.` : "The cutoff changed; this run did not qualify.";
     pendingRun = null;
-  } catch (error) { message.textContent = `Submission failed: ${error.message}. Submit score to retry, skip, or play again.`; }
+  } catch (error) { message.textContent = `Submission failed: ${error.message}. Submit again or choose Skip score.`; }
   finally {
     clearTimeout(submissionTimeout);
     submittingRun = false;
     leaderboardDialog.querySelectorAll("button").forEach(button => { button.disabled = false; });
+    updateScoreActions();
+    leaderboardDialog.querySelector(pendingRun ? "[data-submit-score]" : "[data-play-again]").focus();
   }
 });
 

@@ -57,7 +57,7 @@ for (const outcome of ["game_over", "victory"]) {
     await finishRun(page, outcome, testInfo);
     await expect(page.getByRole("button", { name: "Refresh scoreboard" })).toBeVisible();
     await expect(page.locator("#initials-form")).toBeVisible();
-    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    await page.getByRole("button", { name: "Skip score", exact: true }).click();
     await expect(page.locator("#run-result")).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`${outcome}.png`) });
     const replay = page.getByRole("button", { name: "Retry game", exact: true });
@@ -66,25 +66,28 @@ for (const outcome of ["game_over", "victory"]) {
     await assertRestart(page);
   });
 }
-test("nonqualifying and offline runs retain their outcome and replay", async ({ page }) => {
+test("nonqualifying and offline runs retain their outcome and replay", async ({ page }, testInfo) => {
   await bootRuby(page);
   await page.unroute("**/api/leaderboard");
-  const entries = Array.from({ length: 15 }, (_, i) => ({ id: `score-${i}`, rank: i + 1, initials: "RAI", score: 9999, stage: 20, difficulty: "normal", outcome: "victory" }));
+  const entries = Array.from({ length: 15 }, (_, i) => ({ id: `score-${i}`, rank: i + 1, initials: ["ACE", "JAX", "RUB", "NEO", "PIX"][i % 5], score: 256400 - i * 11340, stage: Math.max(4, 20 - i), difficulty: i % 2 ? "normal" : "hard", outcome: i < 3 ? "victory" : "game_over" }));
   await page.route("**/api/leaderboard", route => route.fulfill({ json: { ...emptyBoard, entries } }));
   await finishRun(page, "game_over");
   await expect(page.locator("#initials-form")).toBeHidden();
   await expect(page.locator("#leaderboard-status")).toContainText("did not reach");
+  await page.screenshot({ path: testInfo.outputPath("scoreboard-ranked.png") });
   await page.unroute("**/api/leaderboard");
   await page.route("**/api/leaderboard", route => route.abort());
   await page.getByRole("button", { name: "Refresh scoreboard" }).click();
   await expect(page.locator("#leaderboard-status")).toContainText("Offline");
   await expect(page.locator("#initials-form")).toBeVisible();
+  if (await page.getByRole("button", { name: "Skip score", exact: true }).isVisible()) await page.getByRole("button", { name: "Skip score", exact: true }).click();
   await page.getByRole("button", { name: "Retry game", exact: true }).click();
   await assertRestart(page);
   await page.evaluate(() => localStorage.setItem("raibert.leaderboard.cache", "malformed"));
   await finishRun(page, "game_over");
   await expect(page.locator("#leaderboard-status")).toContainText("Leaderboard unavailable");
   await expect(page.locator("#initials-form")).toBeVisible();
+  if (await page.getByRole("button", { name: "Skip score", exact: true }).isVisible()) await page.getByRole("button", { name: "Skip score", exact: true }).click();
   await page.getByRole("button", { name: "Retry game", exact: true }).click();
   await assertRestart(page);
 });
@@ -106,11 +109,13 @@ test("submission failure can retry and pending submission blocks replay", async 
   await page.getByRole("button", { name: "Submit score" }).click();
   await expect(page.locator("#leaderboard-status")).toContainText("Submission failed");
   await page.getByRole("button", { name: "Submit score" }).click();
-  await expect(page.getByRole("button", { name: "Retry game", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Retry game", exact: true })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Submit score", exact: true })).toBeDisabled();
   await page.keyboard.press("Escape");
   await expect(page.locator("#leaderboard-dialog")).toBeVisible();
   release();
   await expect(page.locator("#leaderboard-status")).toHaveText("Accepted at rank 1.");
+  if (await page.getByRole("button", { name: "Skip score", exact: true }).isVisible()) await page.getByRole("button", { name: "Skip score", exact: true }).click();
   await page.getByRole("button", { name: "Retry game", exact: true }).click();
   await assertRestart(page);
   expect(submitCount).toBe(2);
@@ -159,7 +164,7 @@ test("rescue cues render across the campaign and frame timing is recorded", asyn
 test("menu Replay resets a real ended run and clears its submission", async ({ page }) => {
   await bootRuby(page);
   await finishRun(page, "game_over");
-  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Close leaderboard", exact: true }).click();
   await page.locator("#game").click({ position: { x: 80, y: 180 } });
   await page.getByRole("button", { name: "Replay", exact: true }).click();
   await expect(page.locator("#menu-dialog")).toBeHidden();
@@ -187,7 +192,9 @@ test('ending supports reduced motion, mute, and an immediate leaderboard transit
   await page.getByRole('button', { name: 'View leaderboard', exact: true }).click();
   await expect(page.locator('#ending-dialog')).toBeHidden();
   await expect(page.locator('#leaderboard-dialog')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Refresh scoreboard' })).toHaveText('Refresh');
+  await expect(page.getByRole('button', { name: 'Refresh scoreboard' })).toContainText('Refresh');
+  await expect(page.getByRole('button', { name: 'Retry game', exact: true })).toBeHidden();
+  await page.getByRole('button', { name: 'Skip score', exact: true }).click();
   await page.getByRole('button', { name: 'Retry game', exact: true }).click();
   await assertRestart(page);
 });

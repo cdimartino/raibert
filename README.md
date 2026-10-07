@@ -44,7 +44,7 @@ Gold marks and arrows show each rescue ship’s exact launch tile and direction.
 
 Swipe diagonally to hop. On the selection screen, swipe horizontally for a character, vertically for difficulty, and tap to start. Tap during play to pause; hold on selection to open the menu. A compact draggable D-pad is available from the menu and is hidden by default.
 
-After a loss or victory, an animated ending with a custom sound leads into the leaderboard. The result panel retains your final score, stage, and earned bonuses. **Retry game** starts a fresh run and skips any unsubmitted score. **Refresh** only reloads the leaderboard.
+After a loss or victory, an animated ending with a custom sound leads into the leaderboard. The result panel retains your final score, stage, and earned bonuses. The footer shows **Submit score** / **Skip score**, then replaces those actions with **Retry game** after submission or an explicit skip. **Refresh** only reloads the leaderboard.
 
 ## Worldwide leaderboard
 

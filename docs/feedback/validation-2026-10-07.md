@@ -4,7 +4,7 @@ This release addresses issues #5–#9 and #12 after the analytics prerequisite i
 
 ## Game-over and replay (#5)
 
-A 2.8-second animated ending (1.2 seconds with reduced motion) shows the outcome and counts up the final score before automatically opening the leaderboard. Players can continue immediately. Distinct four-note loss/victory tones honor mute. The leaderboard retains a visible loss/victory result, final score, and stage. Retry game resets the actual Ruby game; Refresh only fetches scores. An in-flight submission temporarily disables replay/close, with a 15-second timeout so a stalled request cannot trap the player. Offline failures preserve the run for retry, skip, or replay. Restarting through either the leaderboard or menu clears the old submission.
+A 2.8-second animated ending (1.2 seconds with reduced motion) shows the outcome and counts up the final score before automatically opening the leaderboard. Players can continue immediately. Distinct four-note loss/victory tones honor mute. The leaderboard retains a visible loss/victory result, final score, and stage. The redesigned scoreboard centers the ranking table, with a compact run summary, restrained colors, top-rank accents and a useful empty state. Footer Submit score / Skip score actions become Retry game only after a successful submission or an explicit skip. Keyboard focus follows the replacement action. Retry game resets the actual Ruby game; the small Refresh control only fetches scores. An in-flight submission temporarily disables replay/close, with a 15-second timeout so a stalled request cannot trap the player. Offline failures preserve the run for another submission attempt or explicit skip before replay. Restarting through either the leaderboard or menu clears the old submission.
 
 Playwright exposes the Ruby VM only through an intercepted test response. The production client contains no test-evaluation API. Tests complete a real Ruby fall or the last stage's final tile, wait for the actual game outcome, and exercise keyboard/touch replay. A fresh default run has three lives, stage 1, and **100 points**: reset clears the old score, then the starting tile awards 100. The issue brief's proposed zero-score assertion was inconsistent with the existing scoring rules.
 
@@ -62,3 +62,5 @@ Headless frame samples (60 frames, video recording and two workers) had a 33.3 m
 - [Movement preset, desktop](controls-desktop.png)
 - [Down-angle rescue guidance, stage 15 mobile](rescue-stage-15-mobile.png)
 - [Animated ending, mobile (during score count-up)](ending-mobile.png)
+- [Populated scoreboard, desktop](scoreboard-desktop.png)
+- [Populated scoreboard, mobile](scoreboard-mobile.png)
