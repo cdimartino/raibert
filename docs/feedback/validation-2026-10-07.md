@@ -40,11 +40,11 @@ Conflict checks use explicit selection/options/gameplay contexts. Movement can r
 
 Stage clears add up to 2,000 × stage for speed, decaying in 10-point increments over 1,200 ms per required tile increment, plus 500 × stage for no lives lost during that stage. Only completed stages award these bonuses. Base rewards remain intact. The HUD previews the potential award; stage-clear and terminal results show earned amounts. Pauses use the frozen game clock, so they do not consume bonus time. Retry resets accumulated bonuses.
 
-Deterministic cases compare identical completion at different times, expired/maximum bounds, clean versus damaged runs, once-only awards, stage reset and game reset. Browser coverage checks pause behavior. The existing regression enemy appears from stage 3 and removes one tile increment; its new UNDO −1 label makes that role visible. Tests verify undoing a cleared tile, restoring it, and the zero lower bound.
+Deterministic cases compare identical completion at different times, expired/maximum bounds, clean versus damaged runs (including a collision on the final tile of a stage or victory), once-only awards, stage reset and game reset. Browser coverage checks pause behavior. The existing regression enemy appears from stage 3 and removes one tile increment; its new UNDO −1 label makes that role visible. Tests verify undoing a cleared tile, restoring it, and the zero lower bound.
 
 ## Verification
 
-- GameState: 100% executable-line coverage (329/329).
+- GameState: 100% executable-line coverage (332/332).
 - Board layouts: 100% (167/167).
 - Leaderboard domain: 100% (27/27).
 - Collector, browser-shim/window, HTTP integration, packaging, audio, touch input, and analytics-client checks pass.
