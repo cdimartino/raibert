@@ -7,6 +7,8 @@ cd "$ROOT"
 bundle exec ruby test/unit_coverage_test.rb
 ruby test/board_layouts_test.rb
 ruby test/leaderboard_test.rb
+ruby test/analytics_test.rb
+node test/analytics_test.mjs
 ruby test/web_shim_test.rb
 bundle exec ruby test/rack_test.rb
 bundle exec ruby test/site_test.rb

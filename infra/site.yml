@@ -78,6 +78,189 @@ Resources:
         SigningBehavior: always
         SigningProtocol: sigv4
 
+  AnalyticsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../analytics/
+      Handler: handler.handler
+      Runtime: ruby4.0
+      Architectures: [arm64]
+      MemorySize: 128
+      Timeout: 3
+      LoggingConfig:
+        LogFormat: Text
+
+  AnalyticsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AnalyticsFunction}
+      RetentionInDays: 30
+
+  AnalyticsFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      AuthType: AWS_IAM
+      InvokeMode: BUFFERED
+      TargetFunctionArn: !GetAtt AnalyticsFunction.Arn
+
+  AnalyticsFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !Ref AnalyticsFunction
+      FunctionUrlAuthType: AWS_IAM
+      Principal: cloudfront.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}
+
+  AnalyticsFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AnalyticsFunction
+      Principal: cloudfront.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}
+
+  UsageDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub ${AWS::StackName}-usage
+      DashboardBody: !Sub |
+        {
+          "start": "-P7D",
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Visits and browser sessions",
+                "view": "timeSeries",
+                "region": "${AWS::Region}",
+                "stat": "Sum",
+                "period": 3600,
+                "metrics": [
+                  [
+                    "RaiBert/Usage",
+                    "PageViews",
+                    "Site",
+                    "raibert.lol"
+                  ],
+                  [
+                    "RaiBert/Usage",
+                    "Sessions",
+                    "Site",
+                    "raibert.lol"
+                  ]
+                ]
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Gameplay",
+                "view": "timeSeries",
+                "region": "${AWS::Region}",
+                "stat": "Sum",
+                "period": 3600,
+                "metrics": [
+                  [
+                    "RaiBert/Usage",
+                    "GameStarts",
+                    "Site",
+                    "raibert.lol"
+                  ],
+                  [
+                    "RaiBert/Usage",
+                    "GameOvers",
+                    "Site",
+                    "raibert.lol"
+                  ],
+                  [
+                    "RaiBert/Usage",
+                    "Victories",
+                    "Site",
+                    "raibert.lol"
+                  ]
+                ]
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 12,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Active play time and runtime failures",
+                "view": "timeSeries",
+                "region": "${AWS::Region}",
+                "stat": "Sum",
+                "period": 3600,
+                "metrics": [
+                  [
+                    "RaiBert/Usage",
+                    "ActivePlaySeconds",
+                    "Site",
+                    "raibert.lol"
+                  ],
+                  [
+                    "RaiBert/Usage",
+                    "RuntimeErrors",
+                    "Site",
+                    "raibert.lol",
+                    {
+                      "yAxis": "right"
+                    }
+                  ]
+                ]
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 18,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "CDN requests (includes assets and bots)",
+                "view": "timeSeries",
+                "region": "us-east-1",
+                "stat": "Sum",
+                "period": 3600,
+                "metrics": [
+                  [
+                    "AWS/CloudFront",
+                    "Requests",
+                    "DistributionId",
+                    "${SiteDistribution}",
+                    "Region",
+                    "Global"
+                  ]
+                ]
+              }
+            },
+            {
+              "type": "log",
+              "x": 0,
+              "y": 24,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Page views by referring domain and device (selected time range)",
+                "region": "${AWS::Region}",
+                "view": "table",
+                "query": "SOURCE '/aws/lambda/${AnalyticsFunction}' | filter event = 'page_view' | stats count(*) as pageViews by referrer, device | sort pageViews desc"
+              }
+            }
+          ]
+        }
+
   LeaderboardTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Retain
@@ -331,6 +514,14 @@ Resources:
           ViewerProtocolPolicy: redirect-to-https
         DefaultRootObject: index.html
         CacheBehaviors:
+          - PathPattern: /api/analytics
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+            ResponseHeadersPolicyId: !Ref SecurityHeadersPolicy
+            TargetOriginId: analytics-function
+            ViewerProtocolPolicy: https-only
           - PathPattern: /api/*
             AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
             CachedMethods: [GET, HEAD]
@@ -355,6 +546,14 @@ Resources:
               OriginSSLProtocols: [TLSv1.2]
             DomainName: !Select [2, !Split ["/", !GetAtt LeaderboardFunctionUrl.FunctionUrl]]
             Id: leaderboard-function
+            OriginAccessControlId: !Ref LeaderboardOriginAccessControl
+          - CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+            DomainName: !Select [2, !Split ["/", !GetAtt AnalyticsFunctionUrl.FunctionUrl]]
+            Id: analytics-function
             OriginAccessControlId: !Ref LeaderboardOriginAccessControl
         PriceClass: PriceClass_100
         ViewerCertificate:
@@ -490,6 +689,9 @@ Resources:
           Value: production
 
 Outputs:
+  UsageDashboardUrl:
+    Description: Private visitor and gameplay analytics (AWS sign-in required)
+    Value: !Sub https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${AWS::StackName}-usage
   SiteUrl:
     Description: Canonical production URL
     Value: https://raibert.lol
