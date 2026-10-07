@@ -26,7 +26,7 @@ class GameState
 
   attr_reader :player, :tiles, :enemies, :pickup, :lives, :score, :stage,
               :level, :target, :status, :rescues, :freeze_until, :shield_until,
-              :difficulty, :board
+              :difficulty, :board, :score_bonuses, :last_stage_bonus
 
   def initialize(random: Random.new, now: 0, difficulty: :normal, start_level: 1, starting_lives: nil)
     @random = random
@@ -46,6 +46,7 @@ class GameState
   def reset(now = 0)
     @lives = @starting_lives
     @score = 0
+    @score_bonuses = { speed: 0, clean: 0 }
     @stage = @start_level
     setup_stage(now)
   end
@@ -135,12 +136,25 @@ class GameState
     [2 + ((@level - 1) / 4) + @difficulty_settings[:enemies], 2].max
   end
 
+  def speed_bonus(now)
+    budget = @board.tiles.length * @target * 1_200
+    remaining = (budget - (now - @stage_started_at)).clamp(0, budget)
+    (2_000 * @level * remaining / budget / 10) * 10
+  end
+
+  def clean_bonus
+    @stage_deaths.zero? ? 500 * @level : 0
+  end
+
   private
 
   def setup_stage(now)
     @level = @stage
     @board = BoardLayouts.fetch(@level)
     @target = LEVEL_TARGETS.fetch(@level - 1)
+    @stage_started_at = now
+    @stage_deaths = 0
+    @last_stage_bonus = { speed: 0, clean: 0 }
     @tiles = @board.tiles.to_h { |position| [position, 0] }
     @player = @board.start.dup
     @player_motion = nil
@@ -164,6 +178,11 @@ class GameState
     return unless @tiles.values.all? { |value| value == @target }
 
     @score += 1_000 * @level
+    @last_stage_bonus = { speed: speed_bonus(now), clean: clean_bonus }
+    @last_stage_bonus.each do |kind, points|
+      @score_bonuses[kind] += points
+      @score += points
+    end
     if @level == LEVEL_COUNT
       @status = :victory
     else
@@ -183,6 +202,7 @@ class GameState
   end
 
   def lose_life(now)
+    @stage_deaths += 1
     @lives -= 1
     @player = @board.start.dup
     @player_motion = nil

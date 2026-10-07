@@ -10,6 +10,9 @@ const surface = document.querySelector("#game-surface");
 const menuDialog = document.querySelector("#menu-dialog");
 const menuPrimaryButton = document.querySelector("[data-menu-primary]");
 const leaderboardDialog = document.querySelector("#leaderboard-dialog");
+const endingDialog = document.querySelector("#ending-dialog");
+let endingTimer;
+let endingFrame;
 const floatingControls = document.querySelector("#floating-controls");
 const SETTINGS_KEY = "raibert.settings.v1";
 const DEFAULT_SETTINGS = { version: 1, overlay: { enabled: false, portrait: { x: .58, y: .72 }, landscape: { x: .78, y: .62 } }, game: { muted: false, selection: 0, difficulty: "normal", controls: {} }, initials: "" };
@@ -178,6 +181,25 @@ class AudioEngine {
       this.buffers.set(url, this.prefetch(url).then(bytes => this.context.decodeAudioData(bytes.slice(0))));
     }
     return this.buffers.get(url);
+  }
+
+  finale(victory) {
+    if (!this.context) return;
+    this.stopSong();
+    const notes = victory ? [392, 494, 587, 784] : [392, 330, 262, 196];
+    notes.forEach((frequency, index) => {
+      const oscillator = this.context.createOscillator();
+      const gain = this.context.createGain();
+      const start = this.context.currentTime + index * 0.18;
+      oscillator.type = "triangle";
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.16, start + 0.025);
+      gain.gain.linearRampToValueAtTime(0, start + 0.4);
+      oscillator.connect(gain).connect(this.context.destination);
+      oscillator.start(start);
+      oscillator.stop(start + 0.42);
+    });
   }
 
   async effect(url, volume, rate, looping) {
@@ -380,8 +402,8 @@ globalThis.RaiBertWeb = {
     if (menuDialog.open) updateMenuPrimaryAction();
     if (!["game_over", "victory"].includes(previous.status) && ["game_over", "victory"].includes(gameState.status)) {
       pendingRun = { runId: crypto.randomUUID(), score: gameState.score, stage: gameState.stage, difficulty: gameState.difficulty, outcome: gameState.status };
-      completedRun = { ...pendingRun };
-      openLeaderboard(true);
+      completedRun = { ...pendingRun, bonuses: { ...gameState.bonuses } };
+      showEnding();
     }
   }
 };
@@ -544,12 +566,43 @@ async function sha256Hex(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
 }
+function finishEnding() {
+  if (!endingDialog.open) return;
+  clearTimeout(endingTimer);
+  cancelAnimationFrame(endingFrame);
+  endingDialog.close();
+  openLeaderboard(true);
+}
+function showEnding() {
+  if (menuDialog.open) menuDialog.close();
+  if (leaderboardDialog.open) leaderboardDialog.close();
+  const run = completedRun;
+  const victory = run.outcome === "victory";
+  endingDialog.dataset.outcome = run.outcome;
+  document.querySelector("#ending-title").textContent = victory ? "Pipeline shipped!" : "Game over";
+  document.querySelector("#ending-bonuses").textContent = `Speed bonus +${run.bonuses.speed || 0} · Clean stages +${run.bonuses.clean || 0}`;
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const start = performance.now();
+  const countScore = now => {
+    const progress = reducedMotion ? 1 : Math.min((now - start) / 1200, 1);
+    document.querySelector("#ending-score").textContent = `Final score: ${Math.round(run.score * progress).toLocaleString("en-US")}`;
+    if (progress < 1) endingFrame = requestAnimationFrame(countScore);
+  };
+  endingDialog.showModal();
+  endingDialog.querySelector("button").focus();
+  countScore(start);
+  if (!settings.game.muted) audio.finale(victory);
+  endingTimer = setTimeout(finishEnding, reducedMotion ? 1200 : 2800);
+}
+endingDialog.querySelector("[data-view-scores]").addEventListener("click", finishEnding);
+endingDialog.addEventListener("cancel", event => { event.preventDefault(); finishEnding(); });
+
 function renderRunResult() {
   const run = ["game_over", "victory"].includes(gameState.status) ? completedRun : null;
   document.querySelector("#run-result").hidden = !run;
   if (!run) return;
   document.querySelector("#run-outcome").textContent = run.outcome === "victory" ? "Victory! All 20 stages cleared" : "Game over";
-  document.querySelector("#run-summary").textContent = `Final score: ${Number(run.score).toLocaleString("en-US")} · Stage ${run.stage} · ${run.difficulty}`;
+  document.querySelector("#run-summary").textContent = `Final score: ${Number(run.score).toLocaleString("en-US")} · Stage ${run.stage} · ${run.difficulty} · Speed +${run.bonuses.speed || 0} · Clean +${run.bonuses.clean || 0}`;
 }
 async function refreshLeaderboard(offerSubmission) {
   const request = ++leaderboardRequest;

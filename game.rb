@@ -606,7 +606,8 @@ class RaiBertWindow < Gosu::Window
     draw_player
 
     if @game.status == :stage_clear
-      overlay("DEPLOYED!", "next pipeline booting...", COLORS[:green])
+      bonus = @game.last_stage_bonus
+      overlay("DEPLOYED!", "+#{bonus[:speed]} SPEED  +#{bonus[:clean]} CLEAN STAGE", COLORS[:green])
     elsif @game.status == :victory
       overlay("PIPELINE SHIPPED!", "#{binding_label(:confirm)} replay  //  #{binding_label(:pause)} character select", accent)
     elsif @game.status == :game_over && !@respawn
@@ -632,6 +633,7 @@ class RaiBertWindow < Gosu::Window
     center_text(@font, format("SCORE %07d // WORLD %s", @game.score, world), viewport_width / 2, portrait? ? 78 : 22, 5, COLORS[:white])
     @small_font.draw_text(@muted ? "MUTED" : "SOUND ON", viewport_width - 112, 54, 5, 1, 1, COLORS[:muted]) unless portrait?
     effects = []
+    effects << "SPEED +#{@game.speed_bonus(game_time)}  CLEAN +#{@game.clean_bonus}" if @game.status == :playing
     effects << "DEBUGGER: FROZEN" if game_time < @game.freeze_until
     effects << "SHIELD: #{((@game.shield_until - game_time) / 1_000.0).ceil}s" if game_time < @game.shield_until
     center_text(@small_font, effects.join("  //  "), viewport_width / 2, portrait? ? 128 : 60, 5, COLORS[:cyan]) unless effects.empty?
@@ -756,6 +758,7 @@ class RaiBertWindow < Gosu::Window
       progress = enemy[:moved_at] ? [[(game_time - enemy[:moved_at]) / GameState::OBJECT_MOVE_TIME.to_f, 0].max, 1].min : 1
       x, y = tile_center(motion_position(enemy, destination, progress))
       draw_object(enemy[:kind], x, y + 6 + Math.sin(game_time / 170.0 + x) * 2, [tile_width * 0.72, 65].min, 3.4)
+      center_text(@small_font, "UNDO −1", x, y - 26, 4.4, COLORS[:amber]) if enemy[:kind] == :regression
     end
   end
 
@@ -968,7 +971,7 @@ class RaiBertWindow < Gosu::Window
     return unless @game && Gosu.respond_to?(:publish_game_state)
 
     state = { screen: @screen, status: @game.status, score: @game.score, stage: @game.stage, lives: @game.lives,
-              difficulty: @game.difficulty, paused: @paused }
+              difficulty: @game.difficulty, paused: @paused, bonuses: @game.score_bonuses }
     return if !force && state == @last_published_state
 
     @last_published_state = state

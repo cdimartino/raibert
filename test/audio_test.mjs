@@ -70,3 +70,17 @@ for (const path of [...assets.effects, assets.initialSong]) {
   assert.equal(wav.toString("ascii", 8, 12), "WAVE");
 }
 console.log("Audio routing, fades, pause/mute races, and preload assets passed");
+
+const endingNotes = [];
+engine.context.createOscillator = () => {
+  const note = { frequency: {}, connect(node) { return node; }, start(at) { this.at = at; }, stop(at) { this.until = at; } };
+  endingNotes.push(note);
+  return note;
+};
+engine.finale(true);
+assert.deepEqual(endingNotes.map(note => note.frequency.value), [392, 494, 587, 784]);
+assert.ok(endingNotes.every(note => note.until > note.at && note.until - note.at < 0.5), 'ending notes are finite');
+endingNotes.length = 0;
+engine.finale(false);
+assert.deepEqual(endingNotes.map(note => note.frequency.value), [392, 330, 262, 196]);
+console.log('Distinct victory and loss ending tones passed');

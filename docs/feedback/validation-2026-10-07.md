@@ -1,10 +1,10 @@
 # Feedback release validation — October 7, 2026
 
-This release addresses issues #5–#9 after the analytics prerequisite in #10.
+This release addresses issues #5–#9 and #12 after the analytics prerequisite in #10.
 
 ## Game-over and replay (#5)
 
-The leaderboard retains a visible loss/victory result, final score, and stage. Play again resets the actual Ruby game; Refresh scores only fetches scores. An in-flight submission temporarily disables replay/close, with a 15-second timeout so a stalled request cannot trap the player. Offline failures preserve the run for retry, skip, or replay. Restarting through either the leaderboard or menu clears the old submission.
+A 2.8-second animated ending (1.2 seconds with reduced motion) shows the outcome and counts up the final score before automatically opening the leaderboard. Players can continue immediately. Distinct four-note loss/victory tones honor mute. The leaderboard retains a visible loss/victory result, final score, and stage. Retry game resets the actual Ruby game; Refresh only fetches scores. An in-flight submission temporarily disables replay/close, with a 15-second timeout so a stalled request cannot trap the player. Offline failures preserve the run for retry, skip, or replay. Restarting through either the leaderboard or menu clears the old submission.
 
 Playwright exposes the Ruby VM only through an intercepted test response. The production client contains no test-evaluation API. Tests complete a real Ruby fall or the last stage's final tile, wait for the actual game outcome, and exercise keyboard/touch replay. A fresh default run has three lives, stage 1, and **100 points**: reset clears the old score, then the starting tile awards 100. The issue brief's proposed zero-score assertion was inconsistent with the existing scoring rules.
 
@@ -36,18 +36,24 @@ Selection names Choose character, Change difficulty, and Start game separately, 
 
 Conflict checks use explicit selection/options/gameplay contexts. Movement can reuse selection-only keys but cannot duplicate another movement binding or an active global action. The browser leaderboard shortcut remains reserved. Presets and custom mappings persist; invalid stored conflicts fall back to safe defaults. The canvas accessibility label and in-game guidance reflect active bindings.
 
+## Speed and skill scoring (#12)
+
+Stage clears add up to 2,000 × stage for speed, decaying in 10-point increments over 1,200 ms per required tile increment, plus 500 × stage for no lives lost during that stage. Only completed stages award these bonuses. Base rewards remain intact. The HUD previews the potential award; stage-clear and terminal results show earned amounts. Pauses use the frozen game clock, so they do not consume bonus time. Retry resets accumulated bonuses.
+
+Deterministic cases compare identical completion at different times, expired/maximum bounds, clean versus damaged runs, once-only awards, stage reset and game reset. Browser coverage checks pause behavior. The existing regression enemy appears from stage 3 and removes one tile increment; its new UNDO −1 label makes that role visible. Tests verify undoing a cleared tile, restoring it, and the zero lower bound.
+
 ## Verification
 
-- GameState: 100% executable-line coverage (314/314).
+- GameState: 100% executable-line coverage (329/329).
 - Board layouts: 100% (167/167).
 - Leaderboard domain: 100% (27/27).
 - Collector, browser-shim/window, HTTP integration, packaging, audio, touch input, and analytics-client checks pass.
 - Full deterministic campaigns pass on easy, normal, hard, and default-life easy. All visit stages 1–20.
-- All 26 browser scenarios pass. Browser coverage is Desktop Chrome and Pixel 7 Chromium emulation. Safari, Firefox, and physical mobile devices were not tested.
+- All 30 browser scenarios pass. Browser coverage is Desktop Chrome and Pixel 7 Chromium emulation. Safari, Firefox, and physical mobile devices were not tested.
 - The committed Wasm runtime is rebuilt from the changed Ruby source.
 - Production leaderboard writes are mocked in tests; no synthetic production scores are submitted.
 
-Headless frame samples (60 frames, video recording and two workers) had a 33.3 ms median in both profiles; desktop p95/max were 50/50 ms, mobile p95/max were 33.5/50 ms. These measurements describe the test runner, not physical-device performance.
+Headless frame samples (60 frames, video recording and two workers) had a 33.3 ms median in both profiles; desktop p95/max were 33.4/50.1 ms, mobile p95/max were 50/66.7 ms. These measurements describe the test runner, not physical-device performance.
 
 ## Visual evidence
 
@@ -55,3 +61,4 @@ Headless frame samples (60 frames, video recording and two workers) had a 33.3 m
 - [Selection instructions, desktop](selection-desktop.png)
 - [Movement preset, desktop](controls-desktop.png)
 - [Down-angle rescue guidance, stage 15 mobile](rescue-stage-15-mobile.png)
+- [Animated ending, mobile (during score count-up)](ending-mobile.png)
