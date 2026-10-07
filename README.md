@@ -36,9 +36,15 @@ Land on every tile until the board is green. Each stage introduces a different b
 | Pause / back | Escape |
 | Options / mute / leaderboard | `O` / `M` / `L` |
 
+Open controls with `O` on the selection screen or while paused. Remap each direction, choose the optional diamond preset (`Q`/`R` above `S`/`D`), or reset to defaults. Movement can reuse selection keys, while gameplay shortcuts remain reserved. Browser bindings persist across reloads.
+
+Gold marks and arrows show each rescue ship’s exact launch tile and direction. Follow that arrow; jumping toward the same ship from another tile can still cause a fall. Each ship works once per stage and returns you to the board’s start.
+
 ### Mobile
 
 Swipe diagonally to hop. On the selection screen, swipe horizontally for a character, vertically for difficulty, and tap to start. Tap during play to pause; hold on selection to open the menu. A compact draggable D-pad is available from the menu and is hidden by default.
+
+After a loss or victory, an animated ending with a custom sound leads into the leaderboard. The result panel retains your final score, stage, and earned bonuses. The footer shows **Submit score** / **Skip score**, then replaces those actions with **Retry game** after submission or an explicit skip. **Refresh** only reloads the leaderboard.
 
 ## Worldwide leaderboard
 
@@ -93,3 +99,5 @@ Rai character artwork is derived from `rai-pets-v2.zip`. Game art prompts are pr
 ## Site activity
 
 The private AWS CloudWatch `raibert-prod-usage` dashboard reports visits, browser sessions, gameplay starts and outcomes, active play time, and runtime errors. See [analytics access and deployment](docs/deployment.md#visitor-and-gameplay-analytics) for setup and counting details.
+
+Stage clears award a speed bonus of up to 2,000 × stage, counting down over 1.2 seconds per required tile increment, plus 500 × stage for a clear without losing a life. Pauses stop the game clock. The HUD previews both bonuses; the ending sequence and scoreboard show earned run totals. From stage 3, purple regression enemies marked **UNDO −1** remove tile progress that you must restore.

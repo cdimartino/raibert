@@ -71,3 +71,17 @@ rescue IndexError
 end
 
 puts "Rai*bert board layout check passed"
+
+layouts.each_with_index do |board, index|
+  board.rescues.each do |(origin, direction), side|
+    destination = board.fall_target(origin, direction)
+    board.tiles.each do |tile|
+      BoardLayout::DIRECTIONS.each_key do |approach|
+        next unless board.fall_target(tile, approach) == destination
+        expected = tile == origin && approach == direction ? side : nil
+        board_assert(board.rescue_for(tile, approach) == expected,
+                     "level #{index + 1} rescue #{side} requires its marked origin and direction")
+      end
+    end
+  end
+end

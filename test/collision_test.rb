@@ -115,3 +115,59 @@ assert(rescue_pickup.move(rescue_direction, 100) == :rescue, "the rescue platfor
 assert(rescue_pickup.lives == 4 && rescue_pickup.pickup.nil?, "returning by rescue collects a summit powerup")
 
 puts "Rai*bert collision check passed"
+
+# A real completed hop must not hide an enemy arriving during subsequent idle time.
+%i[bug exception regression].each do |kind|
+  idle = GameState.new(now: 0)
+  idle.move(:down_left, 420, started_at: 0)
+  make_vulnerable(idle)
+  row, column = idle.player
+  idle.enemies << { kind: kind, row: row, column: column, from: [row - 1, column], spawned_at: 500, moved_at: 500, next_at: 2_000 }
+  assert(idle.tick(749).nil?, "#{kind} does not hit before arriving after a completed hop")
+  assert(idle.tick(750) == :hit && idle.lives == 2, "#{kind} arrival hits an idle player with completed motion")
+  assert(idle.tick(751).nil? && idle.lives == 2, "contact removes only one life")
+end
+
+idle_pickup = GameState.new(now: 0)
+idle_pickup.move(:down_left, 420, started_at: 0)
+row, column = idle_pickup.player
+idle_pickup.instance_variable_set(:@pickup, { kind: :life, row: row, column: column, from: [row - 1, column], spawned_at: 500, moved_at: 500, next_at: 2_000 })
+assert(idle_pickup.tick(749).nil?, "idle pickup waits for arrival")
+assert(idle_pickup.tick(750) == :life && idle_pickup.lives == 4, "idle pickup is collected after completed hop")
+
+old_path = GameState.new(now: 0)
+origin = old_path.player.dup
+old_path.move(:down_left, 420, started_at: 0)
+make_vulnerable(old_path)
+old_path.enemies << { kind: :bug, row: origin[0], column: origin[1], spawned_at: 500, next_at: 2_000 }
+assert(old_path.tick(750).nil? && old_path.lives == 3, "later contact with the departed tile cannot replay old motion")
+
+protected_idle = GameState.new(now: 0)
+protected_idle.move(:down_left, 420, started_at: 0)
+protected_idle.enemies << { kind: :bug, row: protected_idle.player[0], column: protected_idle.player[1], spawned_at: 500, next_at: 2_000 }
+assert(protected_idle.tick(750).nil? && protected_idle.lives == 3, "idle contact respects spawn invulnerability")
+assert(protected_idle.tick(1_200) == :hit, "persistent contact becomes hazardous when invulnerability ends")
+
+[[2, :left, [3, 1], :up_left, [1, 0], :down_left],
+ [3, :left, [3, 1], :up_left, [1, 0], :down_left],
+ [4, :right, [3, 4], :up_right, [1, 3], :down_right],
+ [1, :left, nil, :down_left, nil, nil],
+ [15, :right, nil, :down_right, nil, nil],
+ [18, :right, nil, :down_right, nil, nil]].each do |level, side, origin, direction, alternate, wrong_direction|
+  rescue_game = GameState.new(now: 0, start_level: level)
+  edge = rescue_game.board.rescues.key(side)
+  origin ||= edge.first
+  assert(edge == [origin, direction], "level #{level} preserves the catalog rescue direction")
+  initial_score = rescue_game.score
+  place_player(rescue_game, origin)
+  assert(rescue_game.move(direction, 2_000) == :rescue, "level #{level} marked launch rescues")
+  assert(rescue_game.player == rescue_game.board.start && rescue_game.score == initial_score + 250 && !rescue_game.rescues[side], "rescue returns to start, scores once, and disappears")
+  place_player(rescue_game, origin)
+  assert(rescue_game.move(direction, 4_000) == :fall, "a used ship cannot rescue twice")
+  next unless alternate
+
+  wrong = GameState.new(now: 0, start_level: level)
+  place_player(wrong, alternate)
+  assert(wrong.move(wrong_direction, 2_000) == :fall && wrong.lives == 2, "level #{level} alternate approach still falls")
+  assert(wrong.rescues[side], "ineligible approach does not consume rescue")
+end

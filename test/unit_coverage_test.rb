@@ -6,6 +6,7 @@ require "fileutils"
 
 Coverage.start(lines: true)
 
+load File.expand_path("scoring_test.rb", __dir__)
 load File.expand_path("collision_test.rb", __dir__)
 load File.expand_path("smoke_test.rb", __dir__)
 load File.expand_path("leaderboard_test.rb", __dir__)

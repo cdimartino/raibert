@@ -113,7 +113,7 @@ test("qualifying players can type and submit leaderboard initials", async ({ pag
   await expect(initials).toBeFocused();
   await page.keyboard.type("rai");
   await expect(initials).toHaveValue("RAI");
-  await page.getByRole("button", { name: "Submit score" }).click();
+  await page.keyboard.press("Enter");
   await expect(page.getByText("Accepted at rank 1.")).toBeVisible();
   await expect(page.locator("#leaderboard-rows tr").first().locator("td").nth(2)).toHaveText("100");
   await expect(page.locator("#leaderboard-rows tr").first().locator("td").nth(3)).toHaveText("1");
@@ -129,7 +129,7 @@ test("leaderboard is keyboard accessible and survives an offline refresh", async
   await expect(page.getByText("The board is empty. Be first.")).toBeVisible();
   await page.unroute("**/api/leaderboard");
   await page.route("**/api/leaderboard", route => route.abort());
-  await page.getByRole("button", { name: "Retry" }).click();
+  await page.getByRole("button", { name: "Refresh scoreboard" }).click();
   await expect(page.getByText(/cached scores/)).toBeVisible();
   await page.getByRole("button", { name: "Close" }).last().click();
   await expect(page.locator("#game")).toBeFocused();

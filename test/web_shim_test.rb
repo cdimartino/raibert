@@ -8,14 +8,18 @@ end
 
 class BrowserBridgeStub
   attr_reader :rendered, :frame_callback, :key_callback, :action_callback, :resize_callback, :world_score_callback, :keys, :failure
+  attr_accessor :preferences, :milliseconds
+  attr_reader :saved_preferences, :published
 
   def call(method, *arguments)
     case method
-    when :milliseconds then 123
+    when :milliseconds then @milliseconds || 123
     when :imageSize then "384,416"
     when :textWidth then arguments.last.to_s.length * 10
     when :render then @rendered = JSON.parse(arguments.fetch(0))
-    when :preferences then "{}"
+    when :preferences then JSON.generate(@preferences || {})
+    when :savePreferences then @saved_preferences = JSON.parse(arguments.first)
+    when :publishGameState then @published = JSON.parse(arguments.first)
     when :start
       @frame_callback, @key_callback, @action_callback, @resize_callback, @world_score_callback = arguments.take(5)
       @keys = JSON.parse(arguments.fetch(5))
@@ -117,3 +121,77 @@ rescue ArgumentError => error
 end
 
 puts "Rai*bert web shim check passed"
+
+controls = RaiBertWindow.new
+controls.press(:options)
+controls.press(:confirm)
+controls.button_down("s")
+assert(controls.instance_variable_get(:@controls)[:up_left] == ["s"], "movement can reuse selection-only S")
+controls.press(:select_down)
+controls.press(:confirm)
+%w[s m l return].each do |key|
+  controls.button_down(key)
+  assert(controls.instance_variable_get(:@rebinding_action) == :up_right, "active conflict #{key} is rejected")
+end
+controls.button_down("r")
+assert(bridge.saved_preferences.dig("controls", "up_right") == ["r"], "custom controls are persisted")
+bridge.preferences = bridge.saved_preferences
+restored = RaiBertWindow.new
+assert(restored.instance_variable_get(:@controls)[:up_left] == ["s"], "cross-context binding survives reload")
+restored.button_down("s")
+assert(restored.instance_variable_get(:@difficulty_selection) == 2, "S still changes selection difficulty")
+restored.press(:options)
+4.times { restored.press(:select_down) }
+restored.press(:confirm)
+assert(bridge.saved_preferences["controls"] == RaiBertWindow::DIAMOND_CONTROLS.transform_keys(&:to_s), "diamond preset has explicit Q/R/S/D directions")
+bridge.preferences = bridge.saved_preferences
+diamond = RaiBertWindow.new
+diamond.press(:confirm)
+moves = []
+diamond.define_singleton_method(:begin_hop) { |direction| moves << direction }
+%w[q r s d].each { |key| diamond.button_down(key) }
+assert(moves == RaiBertWindow::MOVE_ACTIONS, "all four preset directions route correctly")
+diamond.press(:pause)
+assert(diamond.instance_variable_get(:@paused), "pause remains available with the preset")
+diamond.press(:options)
+5.times { diamond.press(:select_down) }
+diamond.press(:confirm)
+assert(bridge.saved_preferences.dig("controls", "up_right") == ["e"] && bridge.saved_preferences.dig("controls", "down_left") == ["a"], "reset restores default controls")
+
+bridge.preferences = { "controls" => { "up_left" => ["m"], "up_right" => ["q"] } }
+invalid = RaiBertWindow.new
+assert(invalid.instance_variable_get(:@controls)[:up_left] == ["q"], "invalid stored conflicts restore a safe default mapping")
+bridge.preferences = {}
+selection = RaiBertWindow.new
+[[1000, 760], [760, 1645]].each do |width, height|
+  selection.resize(width, height)
+  Gosu.commands.clear
+  selection.draw
+  labels = Gosu.commands.select { |command| command[:kind] == "text" }.map { |command| command[:text] }
+  %w[Choose\ character: Change\ difficulty: Start\ game:].each do |action|
+    assert(labels.any? { |label| label.start_with?(action) }, "selection explicitly names #{action}")
+  end
+  assert(labels.none? { |label| label.include?("BOOT") || label.include?("//") }, "essential selection guidance uses plain actions")
+end
+
+# The real window reports life loss and sound on the same frame as idle contact.
+bridge.milliseconds = 0
+contact = RaiBertWindow.new
+contact.press(:confirm)
+contact.press(:down_left)
+bridge.milliseconds = 420
+contact.update
+state = contact.instance_variable_get(:@game)
+state.instance_variable_set(:@invulnerable_until, 0)
+row, column = state.player
+state.enemies << { kind: :bug, row: row, column: column, from: [row - 1, column], spawned_at: 500, moved_at: 500, next_at: 2_000 }
+sounds = []
+contact.define_singleton_method(:play) { |event| sounds << event }
+bridge.milliseconds = 749
+contact.update
+assert(state.lives == 3 && sounds.empty?, "no hit feedback before enemy arrival")
+bridge.milliseconds = 750
+contact.update
+assert(state.lives == 2 && sounds == [:hit] && contact.instance_variable_get(:@respawn)[:started_at] == 750, "hit sound, life loss, and death animation start together")
+assert(bridge.published["lives"] == 2, "browser sees the life loss on that frame")
+puts "Feedback window and control checks passed"
