@@ -115,7 +115,6 @@ class RaiBertWindow < Gosu::Window
   MOVE_LABELS = {
     up_left: "UP-LEFT", up_right: "UP-RIGHT", down_left: "DOWN-LEFT", down_right: "DOWN-RIGHT"
   }.freeze
-  MOVE_ARROWS = { up_left: "↖", up_right: "↗", down_left: "↙", down_right: "↘" }.freeze
   KEY_ALIASES = { "enter" => "return", "esc" => "escape" }.freeze
   EFFECTS = %i[select start hop land tile debugger gc life shield patch rescue stage_clear victory fall hit].freeze
 
@@ -645,7 +644,7 @@ class RaiBertWindow < Gosu::Window
       center_text(@small_font, legend, viewport_width / 2, viewport_height - 46, 5, COLORS[:muted])
     end
     if @game.rescues.values.any?
-      center_text(@small_font, "RESCUE: jump from the gold mark along its arrow", viewport_width / 2, viewport_height - 25, 5, COLORS[:amber])
+      center_text(@small_font, "RESCUE: follow the arrow on the launch tile", viewport_width / 2, viewport_height - 25, 5, COLORS[:amber])
     end
     Gosu.draw_rect(130, 61, 220, 5, 0xff263444, 5)
     Gosu.draw_rect(130, 61, 220 * fixed / @game.tiles.length.to_f, 5, accent, 5.1)
@@ -674,8 +673,17 @@ class RaiBertWindow < Gosu::Window
          [x, y + th / 2, x - tw / 2, y], [x - tw / 2, y, x, y - th / 2]].each do |line|
           Gosu.draw_line(line[0], line[1], rim, line[2], line[3], rim, z + 0.015)
         end
-        draw_diamond(x, y, tw * 0.37, th * 0.33, darken(top_color, 0.88), z + 0.016)
-        center_text(@small_font, label, x, y - 8, z + 0.02, COLORS[:background])
+        rescue_route = @game.board.rescues.find do |(origin, _direction), side|
+          origin == position && @game.rescues[side]
+        end
+        draw_diamond(x, y, tw * 0.37, th * 0.33, darken(top_color, rescue_route ? 0.4 : 0.88), z + 0.016)
+        if rescue_route
+          (_origin, direction), = rescue_route
+          destination = @game.board.fall_target(position, direction)
+          draw_launch_inlay(x, y, destination, tw, th, z + 0.02)
+        else
+          center_text(@small_font, label, x, y - 8, z + 0.02, COLORS[:background])
+        end
     end
   end
 
@@ -717,26 +725,25 @@ class RaiBertWindow < Gosu::Window
       position = @game.board.fall_target(origin, direction)
       x, y = tile_center(position)
       draw_object(:rescue, x, y + 10, [tile_width, 92].min, 3.2)
-      origin_x, origin_y = tile_center(origin)
-      dx, dy = x - origin_x, y - origin_y
-      length = Math.hypot(dx, dy)
-      ux, uy = dx / length, dy / length
-      start_x, start_y = origin_x + dx * 0.18, origin_y + dy * 0.18
-      tip_x, tip_y = origin_x + dx * 0.65, origin_y + dy * 0.65
-      draw_diamond(start_x, start_y, 7, 5, COLORS[:amber], 4.2)
-      [-1, 0, 1].each do |offset|
-        Gosu.draw_line(start_x - uy * offset, start_y + ux * offset, COLORS[:amber],
-                       tip_x - uy * offset, tip_y + ux * offset, COLORS[:amber], 4.2)
-      end
-      [-1, 1].each do |sign|
-        Gosu.draw_line(tip_x, tip_y, COLORS[:amber],
-                       tip_x - ux * 12 + uy * 7 * sign, tip_y - uy * 12 - ux * 7 * sign, COLORS[:amber], 4.2)
-      end
-      label = "#{MOVE_ARROWS.fetch(direction)} #{portrait? ? 'SWIPE' : binding_label(direction)}"
-      width = [@small_font.text_width(label) + 12, viewport_width - 16].min
-      label_x = x.clamp(width / 2 + 8, viewport_width - width / 2 - 8)
-      Gosu.draw_rect(label_x - width / 2, y + 36, width, 22, COLORS[:panel], 4.2)
-      center_text(@small_font, label, label_x, y + 39, 4.3, COLORS[:amber])
+    end
+  end
+
+  # A filled arrow inset into the tile face, aligned with the actual jump.
+  def draw_launch_inlay(x, y, destination, tw, th, z)
+    target_x, target_y = tile_center(destination)
+    dx, dy = (target_x - x) / tw, (target_y - y) / th
+    length = Math.hypot(dx, dy)
+    ux, uy = dx / length, dy / length
+    point = lambda do |along, across|
+      [x + (ux * along - uy * across) * tw,
+       y + (uy * along + ux * across) * th]
+    end
+    # Keep the whole inlay inside the diamond, including the arrowhead.
+    shaft = [[-0.22, -0.065], [0.02, -0.065], [0.02, 0.065], [-0.22, 0.065]]
+    head = [[-0.015, -0.17], [0.26, 0], [-0.015, 0.17], [-0.015, 0.17]]
+    [shaft, head].each do |shape|
+      vertices = shape.flat_map { |along, across| [*point.call(along, across), COLORS[:amber]] }
+      Gosu.draw_quad(*vertices, z)
     end
   end
 

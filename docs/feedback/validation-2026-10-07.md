@@ -26,7 +26,7 @@ This establishes a source-level defect consistent with the report, not the repor
 
 ## Rescue guidance (#7)
 
-Every active ship now has a gold launch mark, a directional arrow, and a binding/swipe label. Layout sizing includes ship destinations so ships fit below the HUD. Guidance and markers disappear when rescues are consumed.
+Every active rescue launch tile has a filled gold arrow inset into its top face, pointing toward the ship. The October 8 visual follow-up removes floating labels, launch dots, and arrows between tiles. The inlay replaces the tile text while rescue is available; tile color still shows progress. Layout sizing includes ship destinations so ships fit below the HUD. Guidance and markers disappear when rescues are consumed.
 
 The exact origin/direction restriction is retained. Regression cases cover the eligible up-angle and ineligible down-angle approaches for stages 2–3 left and stage 4 right. Stage 1 left and stages 15/18 right retain their existing down-angle launches. Tests enumerate alternate approaches to all 40 ships across the 20 layouts and preserve one-use behavior, return to start, and the 250-point rescue bonus.
 
