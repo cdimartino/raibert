@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageCostAndOperationsDashboards",
+      "Effect": "Allow",
+      "Action": ["cloudwatch:PutDashboard", "cloudwatch:GetDashboard"],
+      "Resource": [
+        "arn:aws:cloudwatch::129942367502:dashboard/raibert-prod-cost",
+        "arn:aws:cloudwatch::129942367502:dashboard/raibert-prod-operations"
+      ]
+    },
+    {
+      "Sid": "ReadProductionAlarmStatus",
+      "Effect": "Allow",
+      "Action": "cloudwatch:DescribeAlarms",
+      "Resource": "arn:aws:cloudwatch:us-east-1:129942367502:alarm:raibert-prod-*"
+    },
+    {
+      "Sid": "ReadAccountCosts",
+      "Effect": "Allow",
+      "Action": "ce:GetCostAndUsage",
+      "Resource": "arn:aws:ce:us-east-1:129942367502:/GetCostAndUsage"
+    }
+  ]
+}

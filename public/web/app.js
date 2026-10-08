@@ -5,6 +5,8 @@ import { HighScoreTracker, difficultyHighScores } from "./high-score.js";
 
 const highScores = new HighScoreTracker();
 const analytics = createAnalytics();
+let bootPhase = "assets";
+let runtimeVersion = "unknown";
 
 const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d", { alpha: false });
@@ -370,6 +372,7 @@ globalThis.RaiBertWeb = {
       resize = null;
       worldScore = null;
     }
+    bootPhase = "gameplay";
     frameCallback = frame;
     keyCallback = key;
     actionCallback = action;
@@ -395,7 +398,7 @@ globalThis.RaiBertWeb = {
     audio.stopSong();
   },
   fail(message) {
-    analytics.track("runtime_error");
+    analytics.error(message, bootPhase, runtimeVersion);
     analytics.state({ screen: "error" });
     status.hidden = false;
     status.textContent = `Rai*bert stopped: ${message}`;
@@ -771,14 +774,18 @@ async function boot() {
   if (!runtimeResponse.ok) throw new Error(`Runtime manifest ${runtimeResponse.status}`);
   const assets = await assetsResponse.json();
   const runtimeFiles = await runtimeResponse.json();
+  runtimeVersion = runtimeFiles.webassembly;
   await preloadImages(assets.images, assets.imageSources);
   assets.effects.forEach(url => audio.preload(url));
   audio.preload(assets.initialSong);
   status.textContent = "Loading Ruby…";
+  bootPhase = "runtime-download";
   const runtime = await import(`/web/${runtimeFiles.javascript}`);
   const response = await fetch(`/web/${runtimeFiles.webassembly}`);
   if (!response.ok) throw new Error(`Ruby runtime ${response.status}`);
+  bootPhase = "runtime-compile";
   const module = await WebAssembly.compileStreaming(response);
+  bootPhase = "runtime-start";
   const result = await runtime.DefaultRubyVM(module);
   const vm = result.vm || result;
   status.textContent = "Starting Rai*bert…";

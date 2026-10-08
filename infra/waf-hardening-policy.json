@@ -1,0 +1,65 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageExistingWaf",
+      "Effect": "Allow",
+      "Action": [
+        "wafv2:GetWebACL",
+        "wafv2:UpdateWebACL",
+        "wafv2:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:wafv2:us-east-1:129942367502:global/webacl/LeaderboardWebAcl-nCW1SILukEi9/d5cb4f10-4a7b-41e5-8565-8b2064b5d7e0"
+    },
+    {
+      "Sid": "UseAwsManagedRules",
+      "Effect": "Allow",
+      "Action": [
+        "wafv2:DescribeManagedRuleGroup",
+        "wafv2:UpdateWebACL"
+      ],
+      "Resource": "arn:aws:wafv2:us-east-1:129942367502:global/managedruleset/*/*"
+    },
+    {
+      "Sid": "ManageAlertTopic",
+      "Effect": "Allow",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:ListTagsForResource",
+        "sns:TagResource",
+        "sns:UntagResource",
+        "sns:Subscribe",
+        "sns:ListSubscriptionsByTopic"
+      ],
+      "Resource": "arn:aws:sns:us-east-1:129942367502:raibert-prod-operations-alerts"
+    },
+    {
+      "Sid": "ManageAlertSubscription",
+      "Effect": "Allow",
+      "Action": [
+        "sns:GetSubscriptionAttributes",
+        "sns:Unsubscribe"
+      ],
+      "Resource": "arn:aws:sns:us-east-1:129942367502:raibert-prod-operations-alerts:*"
+    },
+    {
+      "Sid": "ManageNewAlarms",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:ListTagsForResource",
+        "cloudwatch:TagResource",
+        "cloudwatch:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:cloudwatch:us-east-1:129942367502:alarm:raibert-prod-traffic-spike",
+        "arn:aws:cloudwatch:us-east-1:129942367502:alarm:raibert-prod-account-monthly-spend"
+      ]
+    }
+  ]
+}

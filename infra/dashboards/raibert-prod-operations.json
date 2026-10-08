@@ -1,0 +1,470 @@
+{
+  "start": "-P1D",
+  "periodOverride": "inherit",
+  "widgets": [
+    {
+      "type": "text",
+      "x": 0,
+      "y": 0,
+      "width": 24,
+      "height": 4,
+      "properties": {
+        "markdown": "# RaiBert operations\nProduction resources only. Gaps mean no published samples, not proof of health. Error and throttle metrics may be sparse. Storage and certificate metrics update less frequently.\n\n[Analytics](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-usage) | [Operations](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-operations) | [Cost](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-cost)"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 4,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "CDN requests (includes assets and bots)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/CloudFront",
+            "Requests",
+            "DistributionId",
+            "ECRDPSJN9SGIB",
+            "Region",
+            "Global",
+            {}
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 4,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "CDN HTTP error rates (%)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Average",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/CloudFront",
+            "4xxErrorRate",
+            "DistributionId",
+            "ECRDPSJN9SGIB",
+            "Region",
+            "Global",
+            {}
+          ],
+          [
+            "AWS/CloudFront",
+            "5xxErrorRate",
+            "DistributionId",
+            "ECRDPSJN9SGIB",
+            "Region",
+            "Global",
+            {}
+          ]
+        ],
+        "yAxis": {
+          "left": {
+            "min": 0
+          }
+        }
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 10,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Backend invocations",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/Lambda",
+            "Invocations",
+            "FunctionName",
+            "raibert-prod-AnalyticsFunction-oBMXKMienwAg",
+            {
+              "label": "Analytics"
+            }
+          ],
+          [
+            "AWS/Lambda",
+            "Invocations",
+            "FunctionName",
+            "raibert-prod-LeaderboardFunction-4Zw1UXzSSeEl",
+            {
+              "label": "Leaderboard"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 10,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Backend errors and throttles",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/Lambda",
+            "Errors",
+            "FunctionName",
+            "raibert-prod-AnalyticsFunction-oBMXKMienwAg",
+            {
+              "label": "Analytics Errors"
+            }
+          ],
+          [
+            "AWS/Lambda",
+            "Throttles",
+            "FunctionName",
+            "raibert-prod-AnalyticsFunction-oBMXKMienwAg",
+            {
+              "label": "Analytics Throttles"
+            }
+          ],
+          [
+            "AWS/Lambda",
+            "Errors",
+            "FunctionName",
+            "raibert-prod-LeaderboardFunction-4Zw1UXzSSeEl",
+            {
+              "label": "Leaderboard Errors"
+            }
+          ],
+          [
+            "AWS/Lambda",
+            "Throttles",
+            "FunctionName",
+            "raibert-prod-LeaderboardFunction-4Zw1UXzSSeEl",
+            {
+              "label": "Leaderboard Throttles"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 16,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Backend execution duration p95 (ms)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "p95",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/Lambda",
+            "Duration",
+            "FunctionName",
+            "raibert-prod-AnalyticsFunction-oBMXKMienwAg",
+            {
+              "label": "Analytics"
+            }
+          ],
+          [
+            "AWS/Lambda",
+            "Duration",
+            "FunctionName",
+            "raibert-prod-LeaderboardFunction-4Zw1UXzSSeEl",
+            {
+              "label": "Leaderboard"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 16,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Function URL request latency p95 (ms)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "p95",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/Lambda",
+            "UrlRequestLatency",
+            "FunctionName",
+            "raibert-prod-AnalyticsFunction-oBMXKMienwAg",
+            {
+              "label": "Analytics"
+            }
+          ],
+          [
+            "AWS/Lambda",
+            "UrlRequestLatency",
+            "FunctionName",
+            "raibert-prod-LeaderboardFunction-4Zw1UXzSSeEl",
+            {
+              "label": "Leaderboard"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 22,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Backend concurrent executions (peak)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Maximum",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/Lambda",
+            "ConcurrentExecutions",
+            "FunctionName",
+            "raibert-prod-AnalyticsFunction-oBMXKMienwAg",
+            {
+              "label": "Analytics"
+            }
+          ],
+          [
+            "AWS/Lambda",
+            "ConcurrentExecutions",
+            "FunctionName",
+            "raibert-prod-LeaderboardFunction-4Zw1UXzSSeEl",
+            {
+              "label": "Leaderboard"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 22,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Leaderboard consumed read/write capacity",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/DynamoDB",
+            "ConsumedReadCapacityUnits",
+            "TableName",
+            "raibert-prod-LeaderboardTable-1NZGDJJSQUM8K",
+            {}
+          ],
+          [
+            "AWS/DynamoDB",
+            "ConsumedWriteCapacityUnits",
+            "TableName",
+            "raibert-prod-LeaderboardTable-1NZGDJJSQUM8K",
+            {}
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 28,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "WAF allowed / blocked requests",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/WAFV2",
+            "AllowedRequests",
+            "Resource",
+            "arn:aws:cloudfront::129942367502:distribution/ECRDPSJN9SGIB",
+            "ResourceType",
+            "CF",
+            {}
+          ],
+          [
+            "AWS/WAFV2",
+            "BlockedRequests",
+            "Resource",
+            "arn:aws:cloudfront::129942367502:distribution/ECRDPSJN9SGIB",
+            "ResourceType",
+            "CF",
+            {}
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 28,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "TLS certificate days to expiry",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Minimum",
+        "period": 86400,
+        "metrics": [
+          [
+            "AWS/CertificateManager",
+            "DaysToExpiry",
+            "CertificateArn",
+            "arn:aws:acm:us-east-1:129942367502:certificate/e12990f7-9db1-487f-ad37-4e2790c3510a",
+            {}
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 34,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Application log ingestion (bytes)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/Logs",
+            "IncomingBytes",
+            "LogGroupName",
+            "/aws/lambda/raibert-prod-AnalyticsFunction-oBMXKMienwAg",
+            {
+              "label": "Analytics"
+            }
+          ],
+          [
+            "AWS/Logs",
+            "IncomingBytes",
+            "LogGroupName",
+            "/aws/lambda/raibert-prod-LeaderboardFunction-4Zw1UXzSSeEl",
+            {
+              "label": "Leaderboard"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 34,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Site storage (bytes; daily)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Average",
+        "period": 86400,
+        "metrics": [
+          [
+            "AWS/S3",
+            "BucketSizeBytes",
+            "BucketName",
+            "raibert-lol-129942367502",
+            "StorageType",
+            "StandardStorage",
+            {}
+          ]
+        ]
+      }
+    },
+    {
+      "type": "alarm",
+      "x": 0,
+      "y": 40,
+      "width": 24,
+      "height": 3,
+      "properties": {
+        "title": "Leaderboard, traffic and spending alarms",
+        "alarms": [
+          "arn:aws:cloudwatch:us-east-1:129942367502:alarm:raibert-prod-LeaderboardErrorAlarm-t8xKLGFzfAmA",
+          "arn:aws:cloudwatch:us-east-1:129942367502:alarm:raibert-prod-LeaderboardThrottleAlarm-jFtENeonstTx",
+          "arn:aws:cloudwatch:us-east-1:129942367502:alarm:raibert-prod-traffic-spike",
+          "arn:aws:cloudwatch:us-east-1:129942367502:alarm:raibert-prod-account-monthly-spend"
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 43,
+      "width": 24,
+      "height": 6,
+      "properties": {
+        "title": "New WAF rule matches (Count mode, not blocked)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          [
+            "AWS/WAFV2",
+            "CountedRequests",
+            "WebACL",
+            "LeaderboardWebAcl-nCW1SILukEi9",
+            "Rule",
+            "raibert-ip-reputation"
+          ],
+          [
+            "AWS/WAFV2",
+            "CountedRequests",
+            "WebACL",
+            "LeaderboardWebAcl-nCW1SILukEi9",
+            "Rule",
+            "raibert-score-rate-limit"
+          ],
+          [
+            "AWS/WAFV2",
+            "CountedRequests",
+            "WebACL",
+            "LeaderboardWebAcl-nCW1SILukEi9",
+            "Rule",
+            "raibert-invalid-api"
+          ]
+        ]
+      }
+    }
+  ]
+}

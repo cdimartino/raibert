@@ -41,8 +41,10 @@ jobs:
       - name: Test leaderboard ranking and validation domain
         run: ruby test/leaderboard_test.rb
 
-      - name: Test analytics collector
-        run: ruby test/analytics_test.rb
+      - name: Test analytics collector and WAF request boundaries
+        run: |
+          ruby test/analytics_test.rb
+          ruby test/waf_test.rb
 
       - name: Run browser shim and HTTP integration tests
         run: |

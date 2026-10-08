@@ -73,7 +73,9 @@ else
   fi
 fi
 
+: "${ALERT_EMAIL:?Set ALERT_EMAIL to the recipient for operations and spending alerts}"
 parameter_overrides=(
+  "AlertEmail=$ALERT_EMAIL"
   "HostedZoneId=$hosted_zone_id"
   "GitHubRepository=cdimartino@191587/raibert@1373118135"
 )

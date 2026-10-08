@@ -30,3 +30,20 @@ ensure
   $stdout = original_stdout
 end
 puts "Analytics collector checks passed"
+valid = { "release" => "2026-10-08.1", "browser" => "Chrome", "errorType" => "TypeError", "phase" => "gameplay", "runtime" => "ruby-c9197c67427b1d81.wasm", "source" => "web/app.js", "line" => 321 }
+$stdout = StringIO.new
+begin
+  payload = base.merge("event" => "runtime_error", "diagnostics" => valid)
+  assert(handler.call(event: request(payload))[:statusCode] == 204, 'accept bounded diagnostics')
+  assert(JSON.parse($stdout.string)['diagnostics'] == valid, 'log validated diagnostics')
+  [valid.merge('message' => 'private'), valid.merge('source' => '/home/private.rb'), valid.merge('browser' => 'full user agent'), valid.merge('release' => 'private'), valid.merge('runtime' => 'https://private'), valid.merge('line' => 100000), valid.merge('line' => '321'), nil, []].each do |bad|
+    $stdout = StringIO.new
+    assert(handler.call(event: request(payload.merge('diagnostics' => bad)))[:statusCode] == 422, 'reject invalid diagnostic data')
+    assert($stdout.string.empty?, 'do not log rejected payloads')
+  end
+  assert(handler.call(event: request(base.merge('diagnostics' => valid)))[:statusCode] == 422, 'diagnostics only on runtime errors')
+  assert(handler.call(event: request(base.merge('event' => 'runtime_error')))[:statusCode] == 204, 'old clients remain accepted')
+ensure
+  $stdout = original_stdout
+end
+puts 'Diagnostic collector validation passed'

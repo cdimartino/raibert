@@ -8,7 +8,7 @@ Authenticate to the AWS account containing the `raibert.lol` public hosted zone 
 
 ```sh
 aws login --profile raibert-admin --remote
-AWS_PROFILE=raibert-admin script/bootstrap_aws
+AWS_PROFILE=raibert-admin ALERT_EMAIL=you@example.com script/bootstrap_aws
 ```
 
 Set the resulting deploy-role ARN as the repository variable `AWS_DEPLOY_ROLE_ARN`. Pushes to `main` deploy only after CI succeeds through short-lived GitHub OIDC credentials.
@@ -68,3 +68,36 @@ The policy scopes writes to the production stack and its analytics change sets, 
 Deployment was verified on October 6, 2026 using this policy and the existing site permissions. A live browser visit recorded page-view, session-start, and game-start events with HTTP 204 responses; the game loaded and the leaderboard returned HTTP 200. CloudWatch extracted the visitor and gameplay metrics. If AWS reports another denied action during future changes, review the specific action and resource before extending permissions. After initial provisioning, deployment permissions can be removed and a separate dashboard viewing policy retained if desired.
 
 The analytics client changes must be included in `main` before the next GitHub content deployment. A deployment from an older revision will replace the live client and remove its tracking module, even though the dashboard and collector remain provisioned.
+
+
+## WAF bot safeguards and cost alerts
+
+The firewall keeps the existing blocking rule at 100 API requests per source IP per five minutes. Three new rules begin in Count mode: Amazon IP reputation, 10 leaderboard POSTs per source IP per five minutes, and invalid API routes/methods/body sizes. They record matches but do not yet block. The managed group's individual rules are overridden to Count; a group-level Count override also prevents a newly added managed rule from blocking before review.
+
+Allowed API shapes are GET /api/leaderboard with no body, POST /api/leaderboard up to 1,024 bytes, and POST /api/analytics up to 2,048 bytes. JSON/content validation remains in Lambda. Body inspection overflow fails the allowed-shape check. Rules apply to the raw /api/ path prefix used by the distribution; static game assets are unaffected by these API rules. Existing per-IP API blocking runs first. Sampled requests are disabled on the new rules so score payloads are not newly captured.
+
+Review Count metrics and test multiple players sharing an IP before enabling blocking. Remove both the managed group Count override and its individual Count overrides when intentionally enabling its default actions. Change the two custom Count actions to Block only after checking legitimate traffic. There is no aggregate API cutoff, paid Bot Control, or blanket VPN block.
+
+A traffic alarm detects more than 1,000 CDN requests in five minutes (including assets/bots). This threshold would have flagged the observed 2,188-request spike on October 8; smaller observed spikes stayed below 1,000. A billing alarm detects account-wide estimated month-to-date charges of at least USD 15 using AWS/Billing in us-east-1. Billing is delayed, these are notifications rather than a hard cap, and the alarm resets when monthly estimated charges reset. Both alarms publish through an SNS topic to the AlertEmail stack parameter. The recipient must confirm the SNS subscription email before delivery works.
+
+Existing deployments: apply the reviewed WAF-hardening change set, which preserves deployed application code. The supplemental infra/waf-hardening-policy.json grants the specific WAF, alarm, and SNS permissions needed; it does not grant firewall deletion. The obsolete WAF-removal change set was cancelled. New deployments pass ALERT_EMAIL to script/bootstrap_aws.
+
+Deployed October 8, 2026: stack UPDATE_COMPLETE after the reviewed retry change set. All four rules read back exactly as configured (normalizing AWS base64 match strings). Site and leaderboard returned HTTP 200; analytics rejected a signed invalid payload with HTTP 422; the live browser rendered character selection. The operations dashboard now includes new-rule Count metrics and both alarms, with a matching API readback. SNS email subscription for the configured recipient is PendingConfirmation; delivery is not yet verified. New alarms initially reported INSUFFICIENT_DATA while awaiting evaluation. The first attempt rolled back cleanly because attaching managed rules also requires wafv2:UpdateWebACL on the managedruleset reference; the supplied policy includes this permission. Observation-based promotion from Count to Block remains a separate step.
+
+
+### Analytics dashboard refresh (October 8, 2026)
+
+The usage dashboard now defaults to the last 24 hours, uses five-minute metric buckets with live partial data enabled, and preserves those periods instead of letting CloudWatch choose hourly aggregation. The former dashboard used 3,600-second buckets without live data; minute-level PageViews were available within four minutes of inspection, confirming the chart display was coarser than the incoming data. A dashboard refresh is still needed to fetch new data; avoid frequent auto-refresh because each refresh reruns the log tables.
+
+The layout includes selected-range totals for all seven analytics metrics, aggregate starts/session and active-minutes/start ratios, visits/gameplay/activity/error charts, referrer and input-device tables, daily UTC activity, last-report freshness, recent anonymous events, and clearly labeled CDN request/download volume. Ratios are not unique-person conversion or completed-session durations. No additional tracking fields or identifiers were introduced. Source log tables cover at most the existing 30-day retention. All five log queries and all three derived metric expressions were checked against AWS data. Live console rendering requires a separately authenticated AWS browser session.
+
+
+### Bounded runtime-error diagnostics
+
+Client release 2026-10-08.1 reports at most one runtime failure per page load. Error records may include only an allowlisted phase, exception type, browser family, source-file code and numeric line, plus the client release and hashed Ruby runtime filename. Raw messages, full stack traces, full user agents, arbitrary paths/URLs, and identifiers are never sent. Privacy opt-outs still apply. Backend validation rejects unknown fields/values without logging them; diagnostic fields are stored only in the existing 30-day log group, never as new custom-metric dimensions. Historical count-only reports remain accepted and appear as legacy in the dashboard.
+
+The app marks asset loading, runtime downloading, WebAssembly compilation, runtime startup and gameplay separately. This instruments the existing fatal-error path; unrelated console warnings or recoverable audio/network errors do not become fatal-error counts. The source and line are best-effort and may be unknown. Keep the client release allowlist in analytics/handler.rb aligned when changing the release in public/web/analytics.js. Browser-family detection is approximate, not a fingerprint.
+
+Privacy, diagnostic validation, legacy compatibility, deduplication, opt-out, and static packaging checks passed locally. Deploy the backward-compatible collector before the two changed client JavaScript files. No synthetic runtime-error report is inserted into production analytics for testing.
+
+Diagnostics deployment verified on October 8: CloudFormation UPDATE_COMPLETE, collector package hash matched, both live JavaScript files matched the tested source, and CloudFront invalidation completed. The live endpoint rejected an unapproved diagnostic message field with HTTP 422. Browser startup and game start passed with no console errors. Diagnostic dashboard body readback matched. The collector and client diagnostic contract must stay aligned in future releases.

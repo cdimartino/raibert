@@ -17,6 +17,23 @@ export function createAnalytics(env = globalThis) {
       }).catch(() => {});
     } catch {}
   }
+  let errorReported = false;
+  function error(message, phase = "unknown", runtime = "unknown") {
+    if (errorReported) return;
+    errorReported = true;
+    // Only allowlisted codes leave the browser; never send the original message.
+    const text = String(message);
+    const errorType = text.match(/^(?:Uncaught )?(TypeError|ReferenceError|RangeError|SyntaxError|CompileError|LinkError|RuntimeError|NoMethodError|NameError|ArgumentError|LoadError|StandardError|Error)(?=:)/)?.[1] || "unknown";
+    const location = text.match(/(?:^|[\s/(])((?:game\.rb|web\/gosu\.rb|web\/app\.js|web\/analytics\.js)):(\d{1,5})(?=[:\s)]|$)/m);
+    const ua = env.navigator.userAgent || "";
+    const browser = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\/|FxiOS\//.test(ua) ? "Firefox" : /Chrome\/|CriOS\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "unknown";
+    track("runtime_error", { diagnostics: {
+      release: "2026-10-08.1", browser, errorType,
+      phase: ["assets", "runtime-download", "runtime-compile", "runtime-start", "gameplay"].includes(phase) ? phase : "unknown",
+      runtime: /^ruby-[a-f0-9]{16}\.wasm$/.test(runtime) ? runtime : "unknown",
+      source: location ? location[1] : "unknown", line: location ? Number(location[2]) : 0
+    } });
+  }
   let playing = false;
   let last = env.performance.now();
   let activeMilliseconds = 0;
@@ -58,5 +75,5 @@ export function createAnalytics(env = globalThis) {
     });
     env.addEventListener("pagehide", () => { accrue(); flush(); });
   }
-  return { track, state };
+  return { track, state, error };
 }

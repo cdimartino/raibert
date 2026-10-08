@@ -1,0 +1,235 @@
+{
+  "start": "-P14D",
+  "periodOverride": "inherit",
+  "widgets": [
+    {
+      "type": "text",
+      "x": 0,
+      "y": 0,
+      "width": 24,
+      "height": 4,
+      "properties": {
+        "markdown": "# RaiBert cost and usage\nBilling estimates update periodically. Dollar charts show account-wide estimated month-to-date charges, not RaiBert-only cost; blank does not mean $0. Lower charts show RaiBert usage drivers, not dollar estimates. [Billing preferences](https://console.aws.amazon.com/billing/home#/preferences) | [Cost Explorer](https://console.aws.amazon.com/costmanagement/home#/cost-explorer) (requires billing permissions).\n\n[Analytics](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-usage) | [Operations](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-operations) | [Cost](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-cost)"
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 4,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Account estimated month-to-date charges (USD)",
+        "region": "us-east-1",
+        "view": "singleValue",
+        "stat": "Maximum",
+        "period": 21600,
+        "metrics": [
+          [
+            "AWS/Billing",
+            "EstimatedCharges",
+            "Currency",
+            "USD",
+            {}
+          ]
+        ],
+        "setPeriodToTimeRange": false
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 4,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Account month-to-date charges by service (USD)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Maximum",
+        "period": 21600,
+        "metrics": [
+          [
+            {
+              "expression": "SEARCH('{AWS/Billing,Currency,ServiceName} MetricName=\"EstimatedCharges\" Currency=\"USD\"', 'Maximum', 21600)",
+              "id": "services"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 10,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "RaiBert CDN bytes downloaded per day",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 86400,
+        "metrics": [
+          [
+            "AWS/CloudFront",
+            "BytesDownloaded",
+            "DistributionId",
+            "ECRDPSJN9SGIB",
+            "Region",
+            "Global",
+            {}
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 10,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "RaiBert CDN requests per day",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 86400,
+        "metrics": [
+          [
+            "AWS/CloudFront",
+            "Requests",
+            "DistributionId",
+            "ECRDPSJN9SGIB",
+            "Region",
+            "Global",
+            {}
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 16,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "RaiBert backend invocations per day",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 86400,
+        "metrics": [
+          [
+            "AWS/Lambda",
+            "Invocations",
+            "FunctionName",
+            "raibert-prod-AnalyticsFunction-oBMXKMienwAg",
+            {
+              "label": "Analytics"
+            }
+          ],
+          [
+            "AWS/Lambda",
+            "Invocations",
+            "FunctionName",
+            "raibert-prod-LeaderboardFunction-4Zw1UXzSSeEl",
+            {
+              "label": "Leaderboard"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 16,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "RaiBert log ingestion bytes per day",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 86400,
+        "metrics": [
+          [
+            "AWS/Logs",
+            "IncomingBytes",
+            "LogGroupName",
+            "/aws/lambda/raibert-prod-AnalyticsFunction-oBMXKMienwAg",
+            {
+              "label": "Analytics"
+            }
+          ],
+          [
+            "AWS/Logs",
+            "IncomingBytes",
+            "LogGroupName",
+            "/aws/lambda/raibert-prod-LeaderboardFunction-4Zw1UXzSSeEl",
+            {
+              "label": "Leaderboard"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 22,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "RaiBert daily database consumed capacity",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 86400,
+        "metrics": [
+          [
+            "AWS/DynamoDB",
+            "ConsumedReadCapacityUnits",
+            "TableName",
+            "raibert-prod-LeaderboardTable-1NZGDJJSQUM8K",
+            {}
+          ],
+          [
+            "AWS/DynamoDB",
+            "ConsumedWriteCapacityUnits",
+            "TableName",
+            "raibert-prod-LeaderboardTable-1NZGDJJSQUM8K",
+            {}
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 22,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "RaiBert stored bytes (daily sample)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Average",
+        "period": 86400,
+        "metrics": [
+          [
+            "AWS/S3",
+            "BucketSizeBytes",
+            "BucketName",
+            "raibert-lol-129942367502",
+            "StorageType",
+            "StandardStorage",
+            {}
+          ]
+        ]
+      }
+    }
+  ]
+}

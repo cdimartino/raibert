@@ -1,0 +1,560 @@
+{
+  "start": "-P1D",
+  "periodOverride": "inherit",
+  "widgets": [
+    {
+      "type": "text",
+      "x": 0,
+      "y": 0,
+      "width": 24,
+      "height": 4,
+      "properties": {
+        "markdown": "# RaiBert analytics\n[Operations](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-operations) \u00b7 [Cost](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-cost)\n\nTotals follow the selected time range. Charts use 5-minute buckets, including partial live data; recent values can change. Refresh to fetch newer data. Sessions are browser-tab sessions, not unique people. Blank means no reported samples, not confirmed zero."
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 4,
+      "width": 4,
+      "height": 4,
+      "properties": {
+        "title": "Page views",
+        "region": "us-east-1",
+        "view": "singleValue",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "PageViews",
+            "Site",
+            "raibert.lol",
+            {}
+          ]
+        ],
+        "setPeriodToTimeRange": true
+      }
+    },
+    {
+      "type": "metric",
+      "x": 4,
+      "y": 4,
+      "width": 4,
+      "height": 4,
+      "properties": {
+        "title": "Tab sessions",
+        "region": "us-east-1",
+        "view": "singleValue",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "Sessions",
+            "Site",
+            "raibert.lol",
+            {}
+          ]
+        ],
+        "setPeriodToTimeRange": true
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 4,
+      "width": 4,
+      "height": 4,
+      "properties": {
+        "title": "Game starts",
+        "region": "us-east-1",
+        "view": "singleValue",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "GameStarts",
+            "Site",
+            "raibert.lol",
+            {}
+          ]
+        ],
+        "setPeriodToTimeRange": true
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 4,
+      "width": 4,
+      "height": 4,
+      "properties": {
+        "title": "Game overs",
+        "region": "us-east-1",
+        "view": "singleValue",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "GameOvers",
+            "Site",
+            "raibert.lol",
+            {}
+          ]
+        ],
+        "setPeriodToTimeRange": true
+      }
+    },
+    {
+      "type": "metric",
+      "x": 16,
+      "y": 4,
+      "width": 4,
+      "height": 4,
+      "properties": {
+        "title": "Victories",
+        "region": "us-east-1",
+        "view": "singleValue",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "Victories",
+            "Site",
+            "raibert.lol",
+            {}
+          ]
+        ],
+        "setPeriodToTimeRange": true
+      }
+    },
+    {
+      "type": "metric",
+      "x": 20,
+      "y": 4,
+      "width": 4,
+      "height": 4,
+      "properties": {
+        "title": "Runtime errors",
+        "region": "us-east-1",
+        "view": "singleValue",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "RuntimeErrors",
+            "Site",
+            "raibert.lol",
+            {}
+          ]
+        ],
+        "setPeriodToTimeRange": true
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 8,
+      "width": 8,
+      "height": 4,
+      "properties": {
+        "title": "Active play minutes",
+        "region": "us-east-1",
+        "view": "singleValue",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "ActivePlaySeconds",
+            "Site",
+            "raibert.lol",
+            {
+              "id": "s",
+              "visible": false
+            }
+          ],
+          [
+            {
+              "expression": "s/60",
+              "label": "Active play minutes",
+              "id": "e1"
+            }
+          ]
+        ],
+        "setPeriodToTimeRange": true
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 8,
+      "width": 8,
+      "height": 4,
+      "properties": {
+        "title": "Game starts per tab session",
+        "region": "us-east-1",
+        "view": "singleValue",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "GameStarts",
+            "Site",
+            "raibert.lol",
+            {
+              "id": "g",
+              "visible": false
+            }
+          ],
+          [
+            "RaiBert/Usage",
+            "Sessions",
+            "Site",
+            "raibert.lol",
+            {
+              "id": "s",
+              "visible": false
+            }
+          ],
+          [
+            {
+              "expression": "IF(s>0,g/s)",
+              "label": "Starts / session",
+              "id": "e1"
+            }
+          ]
+        ],
+        "setPeriodToTimeRange": true
+      }
+    },
+    {
+      "type": "metric",
+      "x": 16,
+      "y": 8,
+      "width": 8,
+      "height": 4,
+      "properties": {
+        "title": "Active minutes per game start",
+        "region": "us-east-1",
+        "view": "singleValue",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "ActivePlaySeconds",
+            "Site",
+            "raibert.lol",
+            {
+              "id": "a",
+              "visible": false
+            }
+          ],
+          [
+            "RaiBert/Usage",
+            "GameStarts",
+            "Site",
+            "raibert.lol",
+            {
+              "id": "g",
+              "visible": false
+            }
+          ],
+          [
+            {
+              "expression": "IF(g>0,a/60/g)",
+              "label": "Minutes / start",
+              "id": "e1"
+            }
+          ]
+        ],
+        "setPeriodToTimeRange": true
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Visits and sessions / 5 minutes",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "PageViews",
+            "Site",
+            "raibert.lol",
+            {
+              "label": "Page views"
+            }
+          ],
+          [
+            "RaiBert/Usage",
+            "Sessions",
+            "Site",
+            "raibert.lol",
+            {
+              "label": "Tab sessions"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Game starts and reported endings / 5 minutes",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "GameStarts",
+            "Site",
+            "raibert.lol",
+            {}
+          ],
+          [
+            "RaiBert/Usage",
+            "GameOvers",
+            "Site",
+            "raibert.lol",
+            {}
+          ],
+          [
+            "RaiBert/Usage",
+            "Victories",
+            "Site",
+            "raibert.lol",
+            {}
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 18,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Active play minutes / 5 minutes",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "ActivePlaySeconds",
+            "Site",
+            "raibert.lol",
+            {
+              "id": "s",
+              "visible": false
+            }
+          ],
+          [
+            {
+              "expression": "s/60",
+              "label": "Active play minutes",
+              "id": "e1"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 18,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Runtime error reports / 5 minutes",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "RaiBert/Usage",
+            "RuntimeErrors",
+            "Site",
+            "raibert.lol",
+            {}
+          ]
+        ]
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 24,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Referrers: visits, starts and active minutes",
+        "region": "us-east-1",
+        "view": "table",
+        "query": "SOURCE '/aws/lambda/raibert-prod-AnalyticsFunction-oBMXKMienwAg' | filter ispresent(event) | stats sum(PageViews) as pageViews, sum(Sessions) as tabSessions, sum(GameStarts) as gameStarts, sum(ActivePlaySeconds)/60 as activeMinutes by referrer | sort pageViews desc | limit 20"
+      }
+    },
+    {
+      "type": "log",
+      "x": 12,
+      "y": 24,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Input device: visits and gameplay",
+        "region": "us-east-1",
+        "view": "table",
+        "query": "SOURCE '/aws/lambda/raibert-prod-AnalyticsFunction-oBMXKMienwAg' | filter ispresent(event) | stats sum(PageViews) as pageViews, sum(GameStarts) as gameStarts, sum(GameOvers) as gameOvers, sum(Victories) as victories, sum(ActivePlaySeconds)/60 as activeMinutes by device | sort pageViews desc"
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 30,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Daily activity (UTC days; partial boundary days)",
+        "region": "us-east-1",
+        "view": "table",
+        "query": "SOURCE '/aws/lambda/raibert-prod-AnalyticsFunction-oBMXKMienwAg' | filter ispresent(event) | stats sum(PageViews) as pageViews, sum(Sessions) as tabSessions, sum(GameStarts) as gameStarts, sum(GameOvers) as gameOvers, sum(Victories) as victories, sum(ActivePlaySeconds)/60 as activeMinutes by bin(1d) as day | sort day desc"
+      }
+    },
+    {
+      "type": "log",
+      "x": 12,
+      "y": 30,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Freshness: most recent report of each event",
+        "region": "us-east-1",
+        "view": "table",
+        "query": "SOURCE '/aws/lambda/raibert-prod-AnalyticsFunction-oBMXKMienwAg' | filter ispresent(event) | stats count(*) as reports, max(@timestamp) as lastEvent by event | sort lastEvent desc"
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 36,
+      "width": 24,
+      "height": 6,
+      "properties": {
+        "title": "Recent anonymous events (UTC timestamps)",
+        "region": "us-east-1",
+        "view": "table",
+        "query": "SOURCE '/aws/lambda/raibert-prod-AnalyticsFunction-oBMXKMienwAg' | filter ispresent(event) | fields @timestamp, event, device, referrer, seconds | sort @timestamp desc | limit 25"
+      }
+    },
+    {
+      "type": "text",
+      "x": 0,
+      "y": 48,
+      "width": 24,
+      "height": 4,
+      "properties": {
+        "markdown": "### How to read this\nActive time excludes paused/hidden gameplay. Starts per session and minutes per start are aggregate ratios, not conversion or average completed-session duration. Runs may cross the selected time boundary. Referrer is the referring hostname; `direct` also includes unavailable referrers. Device reflects coarse-pointer input, not a verified device model.\n\nTracking respects privacy settings and can be blocked, lost, or spoofed. No person IDs, IPs, countries, scores, character or difficulty are collected by this analytics pipeline. No cohort retention or unique-player estimates are inferred. Log tables retain up to 30 days and incur query charges on refresh; avoid rapid auto-refresh. Metrics have longer retention."
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 42,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "CDN requests / 5 minutes (assets and bots included)",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "AWS/CloudFront",
+            "Requests",
+            "DistributionId",
+            "ECRDPSJN9SGIB",
+            "Region",
+            "Global"
+          ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 42,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "CDN bytes downloaded / 5 minutes",
+        "region": "us-east-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "liveData": true,
+        "metrics": [
+          [
+            "AWS/CloudFront",
+            "BytesDownloaded",
+            "DistributionId",
+            "ECRDPSJN9SGIB",
+            "Region",
+            "Global"
+          ]
+        ]
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 52,
+      "width": 24,
+      "height": 8,
+      "properties": {
+        "title": "Runtime failures by version, browser and safe error location (legacy reports have no details)",
+        "region": "us-east-1",
+        "view": "table",
+        "query": "SOURCE '/aws/lambda/raibert-prod-AnalyticsFunction-oBMXKMienwAg' | filter event = 'runtime_error' | fields coalesce(diagnostics.release, 'legacy') as release, coalesce(diagnostics.browser, 'unknown') as browser, coalesce(diagnostics.phase, 'unknown') as phase, coalesce(diagnostics.errorType, 'unknown') as errorType, coalesce(diagnostics.source, 'unknown') as source, coalesce(diagnostics.line, 0) as line | stats count(*) as reports, max(@timestamp) as lastSeen by release, browser, phase, errorType, source, line | sort lastSeen desc | limit 50"
+      }
+    }
+  ]
+}
