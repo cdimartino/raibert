@@ -115,7 +115,6 @@ class RaiBertWindow < Gosu::Window
   MOVE_LABELS = {
     up_left: "UP-LEFT", up_right: "UP-RIGHT", down_left: "DOWN-LEFT", down_right: "DOWN-RIGHT"
   }.freeze
-  MOVE_ARROWS = { up_left: "↖", up_right: "↗", down_left: "↙", down_right: "↘" }.freeze
   KEY_ALIASES = { "enter" => "return", "esc" => "escape" }.freeze
   EFFECTS = %i[select start hop land tile debugger gc life shield patch rescue stage_clear victory fall hit].freeze
 
@@ -723,20 +722,15 @@ class RaiBertWindow < Gosu::Window
       ux, uy = dx / length, dy / length
       start_x, start_y = origin_x + dx * 0.18, origin_y + dy * 0.18
       tip_x, tip_y = origin_x + dx * 0.65, origin_y + dy * 0.65
-      draw_diamond(start_x, start_y, 7, 5, COLORS[:amber], 4.2)
+      draw_diamond(start_x, start_y, 7, 5, COLORS[:amber], 3.9)
       [-1, 0, 1].each do |offset|
         Gosu.draw_line(start_x - uy * offset, start_y + ux * offset, COLORS[:amber],
-                       tip_x - uy * offset, tip_y + ux * offset, COLORS[:amber], 4.2)
+                       tip_x - uy * offset, tip_y + ux * offset, COLORS[:amber], 3.9)
       end
       [-1, 1].each do |sign|
         Gosu.draw_line(tip_x, tip_y, COLORS[:amber],
-                       tip_x - ux * 12 + uy * 7 * sign, tip_y - uy * 12 - ux * 7 * sign, COLORS[:amber], 4.2)
+                       tip_x - ux * 12 + uy * 7 * sign, tip_y - uy * 12 - ux * 7 * sign, COLORS[:amber], 3.9)
       end
-      label = "#{MOVE_ARROWS.fetch(direction)} #{portrait? ? 'SWIPE' : binding_label(direction)}"
-      width = [@small_font.text_width(label) + 12, viewport_width - 16].min
-      label_x = x.clamp(width / 2 + 8, viewport_width - width / 2 - 8)
-      Gosu.draw_rect(label_x - width / 2, y + 36, width, 22, COLORS[:panel], 4.2)
-      center_text(@small_font, label, label_x, y + 39, 4.3, COLORS[:amber])
     end
   end
 
