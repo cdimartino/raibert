@@ -81,6 +81,17 @@ def run_campaign(bridge, difficulty, seed, starting_lives: 99, max_frames: 250_0
   { difficulty: difficulty, seed: seed, frames: frames, deaths: deaths }
 end
 
+pickup_window = DemoWindow.new(difficulty: :normal)
+pickup_game = GameState.new(random: Random.new(1), now: 0)
+pickup_window.instance_variable_set(:@game, pickup_game)
+pickup_window.send(:reset_demo_tracking)
+pickup_destination = pickup_game.neighbors.first.last
+pickup_game.instance_variable_set(:@pickup, { kind: :life, row: pickup_destination[0], column: pickup_destination[1] })
+assert(pickup_window.send(:preferred_goal) == [pickup_destination], "powerups are valid pathfinding goals even without enemies")
+assert(pickup_window.send(:graph_distance, pickup_game.player, pickup_window.send(:preferred_goal)) == 1, "powerup goal is reachable by pathfinding")
+pickup_window.instance_variable_set(:@stagnant_moves, 16)
+assert(pickup_window.send(:preferred_goal) == pickup_window.send(:unfinished_tiles), "stalled pickup pursuit falls back to board progress")
+
 results = GameState::DIFFICULTIES.keys.map.with_index do |difficulty, index|
   run_campaign(bridge, difficulty, 10_000 + index)
 end

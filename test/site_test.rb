@@ -26,7 +26,7 @@ Dir.mktmpdir("raibert-site-") do |destination|
   output, status = Open3.capture2e(File.join(ROOT, "script/package_site"), destination)
   assert(status.success?, "package script failed: #{output}")
 
-  %w[index.html 404.html web/app.js web/analytics.js web/input.js web/app.css web/runtime.json assets/art/build.png assets/music/build.wav].each do |path|
+  %w[index.html 404.html web/app.js web/analytics.js web/input.js web/high-score.js web/artwork.js web/app.css web/runtime.json assets/art/build.png assets/music/build.wav].each do |path|
     assert(File.file?(File.join(destination, path)), "package contains #{path}")
   end
 
@@ -46,6 +46,7 @@ Dir.mktmpdir("raibert-site-") do |destination|
 
   assets = JSON.parse(File.read(File.join(destination, "web/assets.json")))
   manifest_urls = assets.fetch("images") + Array(assets["effects"]) + Array(assets["effect"]) + [assets.fetch("initialSong")]
+  manifest_urls += assets.fetch("imageSources").values.flat_map { |source| source.values_at("src", "mobileSrc") }
   manifest_urls.each do |url|
     assert(File.file?(File.join(destination, url.delete_prefix("/"))), "manifest target #{url} exists")
   end

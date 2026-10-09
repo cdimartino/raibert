@@ -39,7 +39,7 @@ class LeaderboardHandler
   def board
     item = @client.get_item(table_name: @table, key: BOARD_KEY, consistent_read: true).item
     entries = item&.fetch("entries", []) || []
-    Leaderboard.response(entries).merge("version" => item&.fetch("version", 0) || 0)
+    Leaderboard.response(entries, high_scores: item&.fetch("highScores", {}) || {}).merge("version" => item&.fetch("version", 0) || 0)
   end
 
   def submit(submission)
@@ -49,18 +49,19 @@ class LeaderboardHandler
     4.times do
       current = @client.get_item(table_name: @table, key: BOARD_KEY, consistent_read: true).item || { "version" => 0, "entries" => [] }
       entry = submission.merge("id" => SecureRandom.uuid, "achievedAt" => Time.now.utc.iso8601)
+      scores = Leaderboard.high_scores(current.fetch("entries", []) + [entry], current.fetch("highScores", {}))
       ranked = Leaderboard.rank(current.fetch("entries", []) + [entry])
       rank = ranked.index { |candidate| candidate.fetch("id") == entry.fetch("id") }&.+(1)
       version = current.fetch("version", 0).to_i + 1
       begin
         @client.transact_write_items(transact_items: [
-          { put: { table_name: @table, item: BOARD_KEY.merge("version" => version, "entries" => ranked),
+          { put: { table_name: @table, item: BOARD_KEY.merge("version" => version, "entries" => ranked, "highScores" => scores),
                    condition_expression: "attribute_not_exists(version) OR version = :version",
                    expression_attribute_values: { ":version" => current.fetch("version", 0) } } },
           { put: { table_name: @table, item: { "pk" => "RUN", "sk" => submission.fetch("runId"), "expiresAt" => Time.now.to_i + 86_400 },
                    condition_expression: "attribute_not_exists(pk)" } }
         ])
-        return response(200, Leaderboard.response(ranked, submission: entry).merge("version" => version, "rank" => rank, "duplicate" => false, "entry" => rank ? entry : nil))
+        return response(200, Leaderboard.response(ranked, submission: entry, high_scores: scores).merge("version" => version, "rank" => rank, "duplicate" => false, "entry" => rank ? entry : nil))
       rescue Aws::DynamoDB::Errors::TransactionCanceledException
         duplicate = @client.get_item(table_name: @table, key: { "pk" => "RUN", "sk" => submission.fetch("runId") }, consistent_read: true).item
         return response(200, board.merge("duplicate" => true)) if duplicate

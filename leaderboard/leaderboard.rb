@@ -29,8 +29,15 @@ class Leaderboard
     entries.sort_by { |entry| [-entry.fetch("score"), entry.fetch("achievedAt"), entry.fetch("id")] }.first(LIMIT).each_with_index.map { |entry, index| entry.merge("rank" => index + 1) }
   end
 
-  def self.response(entries, submission: nil)
+  def self.high_scores(entries, saved = {})
+    DIFFICULTIES.to_h do |difficulty|
+      scores = entries.select { |entry| entry["difficulty"] == difficulty }.map { |entry| entry.fetch("score", 0).to_i }
+      [difficulty, ([saved.fetch(difficulty, 0).to_i] + scores).max]
+    end
+  end
+
+  def self.response(entries, submission: nil, high_scores: {})
     ranked = rank(entries)
-    { "version" => 1, "highScore" => ranked.first&.fetch("score", 0) || 0, "entries" => ranked }.tap { |payload| payload["submission"] = submission if submission }
+    { "version" => 1, "highScore" => ranked.first&.fetch("score", 0) || 0, "entries" => ranked, "highScores" => self.high_scores(entries, high_scores) }.tap { |payload| payload["submission"] = submission if submission }
   end
 end

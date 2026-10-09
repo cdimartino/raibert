@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 
 const emptyBoard = { version: 1, highScore: 0, entries: [] };
-async function bootRuby(page, start = true) {
+async function bootRuby(page, start = true, board = emptyBoard) {
   // Expose the existing VM only in the intercepted test response. Production
   // has no evaluation hook. All outcomes below are driven by real Ruby rules.
   await page.route("**/web/app.js", async route => {
@@ -13,7 +13,7 @@ async function bootRuby(page, start = true) {
     );
     await route.fulfill({ response, body });
   });
-  await page.route("**/api/leaderboard", route => route.fulfill({ json: emptyBoard }));
+  await page.route("**/api/leaderboard", route => route.fulfill({ json: board }));
   await page.goto("/");
   await expect(page.locator("#status")).toBeHidden();
   if (start) await page.keyboard.press("Enter");
@@ -205,4 +205,102 @@ test('pausing preserves the remaining speed bonus', async ({ page }) => {
   const before = await ruby(page, '$test_window.instance_variable_get(:@game).speed_bonus($test_window.send(:game_time))');
   await page.waitForTimeout(300);
   expect(await ruby(page, '$test_window.instance_variable_get(:@game).speed_bonus($test_window.send(:game_time))')).toBe(before);
+});
+
+test("selected difficulty record and one audible celebration per run", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    globalThis.recordNotes = 0;
+    const create = AudioContext.prototype.createOscillator;
+    AudioContext.prototype.createOscillator = function(...args) {
+      globalThis.recordNotes++;
+      return create.apply(this, args);
+    };
+  });
+  await bootRuby(page, false, { ...emptyBoard, highScores: { easy: 200, normal: 1000, hard: 500 } });
+  await expect(page.locator("#game")).toHaveAttribute("data-high-score", "NORMAL HIGH 0001000");
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator("#game")).toHaveAttribute("data-high-score", "HARD HIGH 0000500");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await ruby(page, '$test_window.instance_variable_get(:@game).instance_variable_set(:@score, 1000); $test_window.send(:publish_browser_state, force: true)');
+  await expect(page.locator("#game")).toHaveAttribute("data-new-high", "false");
+  await ruby(page, '$test_window.instance_variable_get(:@game).instance_variable_set(:@score, 1100); $test_window.send(:publish_browser_state, force: true)');
+  await expect(page.locator("#game")).toHaveAttribute("data-new-high", "true");
+  await expect.poll(() => page.evaluate(() => globalThis.recordNotes)).toBe(4);
+  await page.screenshot({ path: testInfo.outputPath("new-high.png") });
+  if (testInfo.project.name === "chromium") {
+    await page.setViewportSize({ width: 900, height: 450 });
+    await page.screenshot({ path: testInfo.outputPath("new-high-landscape.png") });
+  }
+  await ruby(page, '$test_window.instance_variable_get(:@game).instance_variable_set(:@score, 1200); $test_window.send(:publish_browser_state, force: true)');
+  expect(await page.evaluate(() => globalThis.recordNotes)).toBe(4);
+  await expect(page.locator("#game")).toHaveAttribute("data-high-score", "NORMAL HIGH 0001200");
+  await ruby(page, '$test_window.instance_variable_get(:@game).instance_variable_set(:@status, :game_over); $test_window.send(:publish_browser_state, force: true)');
+  await page.getByRole("button", { name: "View leaderboard" }).click();
+  await page.getByRole("button", { name: "Skip score", exact: true }).click();
+  await page.getByRole("button", { name: "Retry game", exact: true }).click();
+  await expect(page.locator("#game")).toHaveAttribute("data-new-high", "false");
+  const notesBeforeMutedRecord = await page.evaluate(() => globalThis.recordNotes);
+  await page.keyboard.press("m");
+  await ruby(page, '$test_window.instance_variable_get(:@game).instance_variable_set(:@score, 1300); $test_window.send(:publish_browser_state, force: true)');
+  await expect(page.locator("#game")).toHaveAttribute("data-new-high", "true");
+  expect(await page.evaluate(() => globalThis.recordNotes)).toBe(notesBeforeMutedRecord);
+  await ruby(page, '$test_window.instance_variable_get(:@game).instance_variable_set(:@status, :game_over); $test_window.send(:publish_browser_state, force: true)');
+  await page.getByRole("button", { name: "View leaderboard" }).click();
+  await page.getByRole("button", { name: "Skip score", exact: true }).click();
+  await page.getByRole("button", { name: "Close leaderboard", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator("#game")).toHaveAttribute("data-high-score", "HARD HIGH 0000500");
+  await expect(page.locator("#game")).toHaveAttribute("data-new-high", "false");
+});
+
+test("a difficulty record below the global cutoff can be saved explicitly", async ({ page }) => {
+  const entries = Array.from({ length: 15 }, (_, i) => ({ id: String(i), rank: i + 1, initials: "ACE", score: 5000 - i, stage: 2, difficulty: "hard", outcome: "game_over" }));
+  await bootRuby(page, true, { ...emptyBoard, entries, highScores: { normal: 0, easy: 0, hard: 5000 } });
+  await finishRun(page, "game_over");
+  await expect(page.locator("#initials-form")).toBeVisible();
+  await expect(page.locator("#initials-form label")).toHaveText("New difficulty high — enter three initials");
+  // Saving remains a deliberate Submit action; viewing the result never posts.
+  let submissions = 0;
+  await page.route("**/api/leaderboard", async route => {
+    if (route.request().method() === "POST") submissions++;
+    await route.fulfill({ json: { version: 2, highScore: 5000, entries, highScores: { normal: 100, easy: 0, hard: 5000 }, rank: null } });
+  });
+  expect(submissions).toBe(0);
+  await page.locator("#initials").fill("CMD");
+  await page.getByRole("button", { name: "Submit score", exact: true }).click();
+  await expect(page.locator("#leaderboard-status")).toHaveText("Score saved. It is below the worldwide Top 15.");
+  expect(submissions).toBe(1);
+});
+
+
+test("optimized artwork keeps atlas geometry and the mobile decoded-memory budget", async ({ page }, testInfo) => {
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.addInitScript(() => {
+    globalThis.loadedArtwork = [];
+    const NativeImage = globalThis.Image;
+    globalThis.Image = class extends NativeImage {
+      constructor(...args) {
+        super(...args);
+        this.addEventListener("load", () => loadedArtwork.push({ url: new URL(this.src).pathname, width: this.naturalWidth, height: this.naturalHeight }));
+      }
+    };
+  });
+  await bootRuby(page, false);
+  const manifest = await (await page.request.get("/web/assets.json")).json();
+  const loaded = await page.evaluate(() => loadedArtwork);
+  const mobile = testInfo.project.name === "mobile-chromium";
+  const divisor = mobile ? 2 : 1;
+  expect(loaded).toHaveLength(manifest.images.length);
+  for (const source of Object.values(manifest.imageSources)) {
+    expect(loaded).toContainEqual({ url: source[mobile ? "mobileSrc" : "src"], width: source.width / divisor, height: source.height / divisor });
+  }
+  expect(loaded.reduce((bytes, image) => bytes + image.width * image.height * 4, 0)).toBe(mobile ? 17_250_672 : 69_002_688);
+  expect(await page.evaluate(() => RaiBertWeb.imageSize("/assets/rai/spritesheet.png"))).toBe("1536,2288");
+  await page.screenshot({ path: testInfo.outputPath("optimized-selection.png") });
+  await page.keyboard.press("Enter");
+  await page.screenshot({ path: testInfo.outputPath("optimized-gameplay.png") });
+  expect(errors).toEqual([]);
 });

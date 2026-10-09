@@ -10,6 +10,31 @@ if [ -z "$SITE_DIR" ] || [ ! -f "$SITE_DIR/index.html" ] || [ ! -f "$SITE_DIR/we
   exit 64
 fi
 
+# Validate the entire runtime before touching the live bucket. A packaged WASM is gzip.
+runtime_files="$(ruby -rjson -rzlib -rdigest -e '
+  root = ARGV.fetch(0)
+  assets = JSON.parse(File.read(File.join(root, "web/assets.json")))
+  urls = assets.fetch("images") + assets.fetch("effects") + [assets.fetch("initialSong")]
+  urls += assets.fetch("imageSources", {}).values.flat_map { |source| source.values_at("src", "mobileSrc") }
+  urls.each do |url|
+    abort "Invalid asset path" unless url.is_a?(String) && url.start_with?("/") && !url.split("/").include?("..")
+    abort "Missing asset: #{url}" unless File.file?(File.join(root, url.delete_prefix("/")))
+  end
+  runtime = JSON.parse(File.read(File.join(root, "web/runtime.json")))
+  {"javascript" => "js", "webassembly" => "wasm"}.each do |key, extension|
+    name = runtime.fetch(key)
+    abort "Invalid runtime filename: #{name}" unless /\Aruby-[0-9a-f]{16}\.#{extension}\z/.match?(name)
+    path = File.join(root, "web", name)
+    bytes = extension == "wasm" ? Zlib::GzipReader.open(path, &:read) : File.binread(path)
+    abort "Runtime hash mismatch: #{name}" unless name.include?(Digest::SHA256.hexdigest(bytes)[0, 16])
+    abort "Invalid WASM: #{name}" if extension == "wasm" && !bytes.start_with?("\0asm")
+    puts name
+  end
+' "$SITE_DIR")"
+for path in index.html 404.html web/assets.json web/app.js web/app.css web/analytics.js web/input.js web/high-score.js web/artwork.js; do
+  test -f "$SITE_DIR/$path" || { echo "Missing site file: $path" >&2; exit 1; }
+done
+
 stack_output() {
   aws cloudformation describe-stacks \
     --region "$AWS_REGION" \
@@ -26,21 +51,8 @@ if [ -z "$BUCKET" ] || [ "$BUCKET" = "None" ] || [ -z "$DISTRIBUTION_ID" ] || [ 
   exit 1
 fi
 
-aws s3 sync "$SITE_DIR/" "s3://$BUCKET/" \
-  --region "$AWS_REGION" \
-  --delete \
-  --cache-control "public,max-age=3600"
-
-for path in index.html 404.html web/runtime.json web/assets.json web/app.js web/analytics.js web/app.css; do
-  aws s3 cp "$SITE_DIR/$path" "s3://$BUCKET/$path" \
-    --region "$AWS_REGION" \
-    --cache-control "no-cache, max-age=0, must-revalidate"
-done
-
-runtime_files="$(
-  ruby -rjson -e 'runtime = JSON.parse(File.read(ARGV.fetch(0))); puts runtime.values' "$SITE_DIR/web/runtime.json"
-)"
-
+# Publish immutable runtimes with final headers first. Never delete previous releases:
+# cached manifests and already-open tabs may still need their content-addressed files.
 while IFS= read -r filename; do
   case "$filename" in
     *.wasm)
@@ -62,6 +74,25 @@ while IFS= read -r filename; do
       ;;
   esac
 done <<< "$runtime_files"
+
+# Exclude runtime artifacts so sync cannot overwrite their gzip/immutable metadata.
+# Mutable entry points are published only after every dependency upload succeeds.
+aws s3 sync "$SITE_DIR/" "s3://$BUCKET/" \
+  --region "$AWS_REGION" \
+  --exclude "index.html" --exclude "404.html" \
+  --exclude "web/runtime.json" --exclude "web/assets.json" \
+  --exclude "web/*.js" --exclude "web/*.wasm" \
+  --cache-control "no-cache, max-age=0, must-revalidate"
+
+for file in "$SITE_DIR"/web/*.js; do
+  case "$(basename "$file")" in ruby-*|app.js) continue ;; esac
+  aws s3 cp "$file" "s3://$BUCKET/web/$(basename "$file")" \
+    --region "$AWS_REGION" --cache-control "no-cache, max-age=0, must-revalidate"
+done
+for path in web/assets.json web/runtime.json web/app.js 404.html index.html; do
+  aws s3 cp "$SITE_DIR/$path" "s3://$BUCKET/$path" \
+    --region "$AWS_REGION" --cache-control "no-cache, max-age=0, must-revalidate"
+done
 
 INVALIDATION_ID="$(aws cloudfront create-invalidation \
   --distribution-id "$DISTRIBUTION_ID" \
