@@ -29,5 +29,73 @@
     "/assets/sounds/fall.wav",
     "/assets/sounds/hit.wav"
   ],
-  "initialSong": "/assets/music/build.wav"
+  "initialSong": "/assets/music/build.wav",
+  "imageSources": {
+    "/assets/rai/spritesheet.png": {
+      "width": 1536,
+      "height": 2288,
+      "src": "/web/art/a043dc7a72bcc713.webp",
+      "mobileSrc": "/web/art/a7ea60d015b62223.webp"
+    },
+    "/assets/rai_voxel/spritesheet.png": {
+      "width": 1536,
+      "height": 2288,
+      "src": "/web/art/0231d6f0cf9c9a33.webp",
+      "mobileSrc": "/web/art/aba29797ff3008ae.webp"
+    },
+    "/assets/art/build.png": {
+      "width": 1448,
+      "height": 1086,
+      "src": "/web/art/c0c158c7c41bf707.webp",
+      "mobileSrc": "/web/art/1ba094ab169a92e5.webp"
+    },
+    "/assets/art/test.png": {
+      "width": 1448,
+      "height": 1086,
+      "src": "/web/art/fab2853314c90541.webp",
+      "mobileSrc": "/web/art/2e3e74f8973c2cf9.webp"
+    },
+    "/assets/art/deploy.png": {
+      "width": 1448,
+      "height": 1086,
+      "src": "/web/art/244a3588f8278e23.webp",
+      "mobileSrc": "/web/art/70a4092065c6279b.webp"
+    },
+    "/assets/art/observe.png": {
+      "width": 1448,
+      "height": 1086,
+      "src": "/web/art/465b3ab965057a95.webp",
+      "mobileSrc": "/web/art/1ef8c437db87c419.webp"
+    },
+    "/assets/art/scale.png": {
+      "width": 1448,
+      "height": 1086,
+      "src": "/web/art/1e3d02a2fb087ee9.webp",
+      "mobileSrc": "/web/art/62c7de25f5e77343.webp"
+    },
+    "/assets/art/objects.png": {
+      "width": 1536,
+      "height": 1024,
+      "src": "/web/art/997bc5ae392e996a.webp",
+      "mobileSrc": "/web/art/4f7e985f8c83d547.webp"
+    },
+    "/assets/art/powerups/life.png": {
+      "width": 512,
+      "height": 512,
+      "src": "/web/art/cd43775da97622e1.webp",
+      "mobileSrc": "/web/art/42c9a5364230094b.webp"
+    },
+    "/assets/art/powerups/shield.png": {
+      "width": 512,
+      "height": 512,
+      "src": "/web/art/6aa162a427815ed8.webp",
+      "mobileSrc": "/web/art/d17753c10f35fb0f.webp"
+    },
+    "/assets/art/powerups/patch.png": {
+      "width": 512,
+      "height": 512,
+      "src": "/web/art/0e258ae21da05d22.webp",
+      "mobileSrc": "/web/art/e4b3c776a6d774cc.webp"
+    }
+  }
 }

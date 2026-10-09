@@ -159,7 +159,7 @@ class DemoWindow < RaiBertWindow
   end
 
   def preferred_goal
-    return [[@game.pickup.values_at(:row, :column)]] if @game.pickup && @game.enemies.any? && @stagnant_moves < 16
+    return [@game.pickup.values_at(:row, :column)] if @game.pickup && @stagnant_moves < 16
 
     unfinished_tiles
   end

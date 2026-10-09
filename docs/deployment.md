@@ -13,6 +13,16 @@ AWS_PROFILE=raibert-admin script/bootstrap_aws
 
 Set the resulting deploy-role ARN as the repository variable `AWS_DEPLOY_ROLE_ARN`. Pushes to `main` deploy only after CI succeeds through short-lived GitHub OIDC credentials.
 
+## Safe static publication
+
+`script/deploy_site` validates runtime hashes and the packaged gzip before making AWS calls. It uploads content-hashed runtime files with their final MIME, compression, and immutable-cache headers first. It then uploads assets and JavaScript dependencies, publishes manifests and the app, and publishes `index.html` last. An upload failure stops the release before later publication steps and invalidation.
+
+Deployments intentionally retain previous files. Cached manifests and tabs already open can still request older runtimes and artwork. Do not add `--delete` back to the sync or apply an automatic expiry to current object keys. Retention is separate from S3 noncurrent-version lifecycle rules. A future cleanup needs an explicit client-support horizon and an inventory of retained release manifests.
+
+Rollback uses the previous packaged release with the same deployment script; retained immutable objects remain available. This is dependency-ordered publication, not an atomic transaction across all mutable files. Keep manifest/module contracts backward compatible during rollout. Runtime filenames and headers must stay immutable; upload a new hash for different decoded bytes.
+
+Verify both a fresh session and a tab opened before deployment. Confirm the new runtime and at least one previous runtime return 200 with `Content-Type: application/wasm` and `Content-Encoding: gzip`. Old objects already deleted by earlier releases need separate restoration; removing deletion from future deploys cannot recover them.
+
 ## Verification
 
 Verify `GET https://raibert.lol/api/leaderboard`, CloudFront error handling, and Lambda throttle/error alarms after an infrastructure change. Do not insert fake scores in production. The Lambda origin uses AWS IAM authentication and is intentionally unavailable to anonymous direct requests.

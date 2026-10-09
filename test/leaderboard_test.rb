@@ -19,7 +19,7 @@ assert(ranked.map { |entry| entry["rank"] } == (1..15).to_a, "ranks are assigned
 assert(ranked.each_cons(2).all? { |left, right| ([-left["score"], left["achievedAt"], left["id"]] <=> [-right["score"], right["achievedAt"], right["id"]]) <= 0 }, "ties are deterministic")
 response = Leaderboard.response([entries.first], submission: entries.first)
 assert(response["highScore"] == entries.first["score"] && response["submission"] == entries.first, "response includes score and submission")
-assert(Leaderboard.response([]) == { "version" => 1, "highScore" => 0, "entries" => [] }, "empty response")
+assert(Leaderboard.response([]) == { "version" => 1, "highScore" => 0, "entries" => [], "highScores" => { "easy" => 0, "normal" => 0, "hard" => 0 } }, "empty response")
 
 module Aws
   module DynamoDB
@@ -36,5 +36,20 @@ fake_client = Object.new
 fake_client.define_singleton_method(:get_item) { |**| fake_result.new(nil) }
 raw_body = LeaderboardHandler.new(table: "leaderboard-test", client: fake_client).call(event: { "requestContext" => { "http" => { "method" => "GET" } } })[:body]
 assert(raw_body.scan(/"version":/).length == 1, "serialized board has one version key")
-assert(JSON.parse(raw_body) == { "version" => 0, "highScore" => 0, "entries" => [] }, "handler returns the empty board revision")
+assert(JSON.parse(raw_body) == { "version" => 0, "highScore" => 0, "entries" => [], "highScores" => { "easy" => 0, "normal" => 0, "hard" => 0 } }, "handler returns the empty board revision")
 puts "Leaderboard domain check passed"
+
+assert(Leaderboard.response(entries, high_scores: { "hard" => 50 })["highScores"] == { "easy" => 0, "normal" => 2, "hard" => 50 }, "difficulty record survives absence from the global board")
+puts "Difficulty record checks passed"
+
+stored_board = { "version" => 1, "entries" => Leaderboard.rank(entries.map { |entry| entry.merge("score" => 2000) }), "highScores" => { "easy" => 800, "normal" => 2000, "hard" => 100 } }
+transaction_client = Object.new
+transaction_client.define_singleton_method(:get_item) { |key:, **| fake_result.new(key == LeaderboardHandler::BOARD_KEY ? stored_board : nil) }
+transaction_client.define_singleton_method(:transact_write_items) { |transact_items:| stored_board.replace(transact_items.first.fetch(:put).fetch(:item)) }
+handler = LeaderboardHandler.new(table: "leaderboard-test", client: transaction_client)
+submitted = handler.call(event: { "httpMethod" => "POST", "headers" => { "content-type" => "application/json" }, "body" => JSON.generate(base.merge("difficulty" => "hard", "score" => 500)) })
+payload = JSON.parse(submitted[:body])
+assert(payload["rank"].nil?, "difficulty record can be below global Top 15")
+assert(stored_board["highScores"] == { "easy" => 800, "normal" => 2000, "hard" => 500 }, "transaction preserves all difficulty records")
+assert(JSON.parse(handler.call(event: { "httpMethod" => "GET" })[:body])["highScores"]["hard"] == 500, "GET retains a record absent from ranked entries")
+puts "Persistent difficulty record transaction checks passed"

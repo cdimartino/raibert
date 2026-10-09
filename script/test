@@ -12,6 +12,7 @@ node test/analytics_test.mjs
 ruby test/web_shim_test.rb
 bundle exec ruby test/rack_test.rb
 bundle exec ruby test/site_test.rb
+ruby test/deploy_site_test.rb
 bundle exec ruby test/gameplay_collision_test.rb
 npm --prefix web test
 npm --prefix web run test:e2e

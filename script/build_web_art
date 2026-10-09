@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+# Web-only derivatives; the original PNGs remain the source for desktop and editing.
+require "json"
+require "digest"
+require "fileutils"
+require "open3"
+
+root = File.expand_path("..", __dir__)
+manifest_path = File.join(root, "public/web/assets.json")
+manifest = JSON.parse(File.read(manifest_path))
+encoder = ENV.fetch("CWEBP", "cwebp")
+version, status = Open3.capture2(encoder, "-version")
+abort "cwebp 1.6.0 is required for reproducible artwork" unless status.success? && version.lines.first.strip == "1.6.0"
+output = File.join(root, "public/web/art")
+FileUtils.mkdir_p(output)
+sources = {}
+manifest.fetch("images").each do |url|
+  original = File.join(root, url.delete_prefix("/"))
+  width, height = File.binread(original, 24).byteslice(16, 8).unpack("NN")
+  sources[url] = { "width" => width, "height" => height }
+  { "src" => 1, "mobileSrc" => 2 }.each do |key, divisor|
+    temporary = File.join(output, "encoding.webp")
+    args = [encoder, "-quiet", "-q", "85", "-m", "6"]
+    args += ["-resize", (width / divisor).to_s, (height / divisor).to_s] if divisor > 1
+    abort "Encoding failed: #{url}" unless system(*args, original, "-o", temporary)
+    name = "#{Digest::SHA256.file(temporary).hexdigest[0, 16]}.webp"
+    FileUtils.mv(temporary, File.join(output, name))
+    sources[url][key] = "/web/art/#{name}"
+  end
+end
+used = sources.values.flat_map { |source| source.values_at("src", "mobileSrc").map { |url| File.basename(url) } }
+Dir.glob(File.join(output, "*.webp")).each { |path| File.delete(path) unless used.include?(File.basename(path)) }
+manifest["imageSources"] = sources
+File.write(manifest_path, JSON.pretty_generate(manifest) + "\n")
+puts "Built full and half-resolution WebP artwork; original dimensions preserved in the manifest."

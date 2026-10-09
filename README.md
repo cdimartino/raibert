@@ -46,6 +46,20 @@ Swipe diagonally to hop. On the selection screen, swipe horizontally for a chara
 
 After a loss or victory, an animated ending with a custom sound leads into the leaderboard. The result panel retains your final score, stage, and earned bonuses. The footer shows **Submit score** / **Skip score**, then replaces those actions with **Retry game** after submission or an explicit skip. **Refresh** only reloads the leaderboard.
 
+## Powerups and scoring strategy
+
+Every pickup awards 300 points. Seek reachable pickups before ordinary tile work, but avoid unsafe landings and abandon a pursuit that stalls. The automatic player uses the same priorities.
+
+| Pickup | Effect | Best use |
+| --- | --- | --- |
+| DBG | Freezes enemy movement for 4 seconds | Cross threatened areas and finish tiles while enemies are frozen. |
+| GC | Clears current enemies | Escape a crowded board; new enemies can still spawn afterward. |
+| 1UP | Adds a life, capped at starting lives plus one | Extend a run, especially when lives are low. |
+| SH | Protects against collisions for 5 seconds | Collect safely and cross threatened tiles during protection. |
+| FX | Advances up to three unfinished tiles by one step | Reduce repeated hops and preserve the stage speed bonus. |
+
+The header always shows the selected difficulty's high score. Beating it turns the header gold, adds **NEW HIGH!**, and plays a rising chime once per run unless muted. A difficulty record can be submitted even below the worldwide Top 15; submitting remains an explicit action. Existing records are initialized from retained leaderboard entries, since older scores outside that list were not stored.
+
 ## Worldwide leaderboard
 
 Every completed browser run can compete on one worldwide Top 15. The board ranks score first, then earliest server acceptance. Enter exactly three letters after a qualifying game over or victory. The board is intentionally casual and client-authoritative: validation, throttling, moderation, and idempotency reduce abuse, but cannot cryptographically prove a browser-generated score.

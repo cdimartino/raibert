@@ -84,3 +84,10 @@ endingNotes.length = 0;
 engine.finale(false);
 assert.deepEqual(endingNotes.map(note => note.frequency.value), [392, 330, 262, 196]);
 console.log('Distinct victory and loss ending tones passed');
+
+endingNotes.length = 0;
+engine.song = { url: "build", paused: false };
+engine.finale("record");
+assert.deepEqual(endingNotes.map(note => note.frequency.value), [392, 494, 587, 784]);
+assert.equal(engine.song.url, "build", "record celebration keeps gameplay music running");
+console.log("Record celebration keeps music running");

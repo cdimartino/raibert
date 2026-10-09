@@ -1,6 +1,9 @@
+import { artworkSource, artworkCrop } from "./artwork.js";
 import { createAnalytics } from "./analytics.js";
 import { classifyGameplaySwipe, menuPrimaryAction } from "./input.js";
+import { HighScoreTracker, difficultyHighScores } from "./high-score.js";
 
+const highScores = new HighScoreTracker();
 const analytics = createAnalytics();
 
 const canvas = document.querySelector("#game");
@@ -122,7 +125,7 @@ function draw(command) {
       const image = images.get(command.url);
       if (!image) break;
       context.globalAlpha = alpha(command.color);
-      context.drawImage(image, ...command.source, command.x, command.y, command.width, command.height);
+      context.drawImage(image.image, ...artworkCrop(image, command.source), command.x, command.y, command.width, command.height);
       break;
     }
     case "text":
@@ -185,7 +188,7 @@ class AudioEngine {
 
   finale(victory) {
     if (!this.context) return;
-    this.stopSong();
+    if (victory !== "record") this.stopSong();
     const notes = victory ? [392, 494, 587, 784] : [392, 330, 262, 196];
     notes.forEach((frequency, index) => {
       const oscillator = this.context.createOscillator();
@@ -327,7 +330,7 @@ globalThis.RaiBertWeb = {
   },
   imageSize(url) {
     const image = images.get(String(url));
-    return image ? `${image.naturalWidth},${image.naturalHeight}` : "0,0";
+    return image ? `${image.width},${image.height}` : "0,0";
   },
   textWidth(size, family, text) {
     context.save();
@@ -338,6 +341,25 @@ globalThis.RaiBertWeb = {
   },
   render(json) {
     const commands = JSON.parse(String(json));
+    const hud = commands.find(command => command.kind === "text" && command.text.startsWith("SCORE ") && command.text.includes("WORLD"));
+    const difficulty = hud ? gameState.difficulty : settings.game.difficulty;
+    const label = highScores.label(difficulty);
+    const recordColor = hud && highScores.newHigh ? 0xffffdc69 : 0xff80e8ad;
+    if (hud) {
+      hud.text = hud.text.replace(/WORLD .*/, `${highScores.newHigh ? "NEW HIGH! " : ""}${label}`);
+      hud.color = recordColor;
+      if (canvas.width < 1100 && hud.y < 50) {
+        hud.y = 78;
+        commands.filter(command => command.kind === "rect" && command.y === 12 && command.height === 80)
+          .forEach(command => { command.height = 112; });
+      }
+      while (hud.size > 10 && this.textWidth(hud.size, hud.family, hud.text) > canvas.width - 40) hud.size--;
+      hud.x = (canvas.width - this.textWidth(hud.size, hud.family, hud.text)) / 2;
+    } else {
+      commands.push({ kind: "text", text: label, x: 20, y: 12, size: Math.min(20, canvas.width / 24), family: "Menlo", scale_x: 1, scale_y: 1, color: recordColor, z: 1000, order: commands.length });
+    }
+    canvas.dataset.highScore = label;
+    canvas.dataset.newHigh = String(Boolean(hud && highScores.newHigh));
     commands.sort((left, right) => left.z - right.z || left.order - right.order);
     context.clearRect(0, 0, canvas.width, canvas.height);
     commands.forEach(draw);
@@ -393,6 +415,7 @@ globalThis.RaiBertWeb = {
   publishGameState(json) {
     const previous = gameState;
     gameState = JSON.parse(String(json));
+    if (highScores.update(previous, gameState) && !settings.game.muted) audio.finale("record");
     analytics.state(gameState);
     if (["game_over", "victory"].includes(previous.status) && gameState.status === "playing") {
       pendingRun = null;
@@ -545,7 +568,8 @@ function renderLeaderboard(board, highlightId) {
     row.append(cell);
     rows.append(row);
   }
-  animateWorldScore(board.highScore ?? null);
+  highScores.load(board);
+  animateWorldScore(highScores.records[gameState.difficulty] ?? null);
 }
 function animateWorldScore(next) {
   if (!worldScoreCallback) return;
@@ -646,7 +670,11 @@ async function refreshLeaderboard(offerSubmission) {
   if (request !== leaderboardRequest || !leaderboardDialog.open || run !== pendingRun) return;
   const cutoff = (board?.entries?.length || 0) < 15 ? -1 : Number(board.entries.at(-1)?.score || 0);
   const form = document.querySelector("#initials-form");
-  form.hidden = !(offerSubmission && run && (!online || run.score > cutoff));
+  const difficultyRecord = board && run && run.score > difficultyHighScores(board)[run.difficulty];
+  form.hidden = !(offerSubmission && run && (!online || run.score > cutoff || difficultyRecord));
+  form.querySelector("label").textContent = difficultyRecord && run.score <= cutoff
+    ? "New difficulty high — enter three initials"
+    : "You made the board — enter three initials";
   if (!form.hidden) {
     document.querySelector("#initials").value = settings.initials;
     document.querySelector("#initials").focus();
@@ -704,7 +732,7 @@ document.querySelector("#initials-form").addEventListener("submit", async event 
     const board = await response.json(); if (!response.ok) throw new Error(board.error || `HTTP ${response.status}`);
     settings.initials = initials; persistSettings(); renderLeaderboard(board, board.entry?.id);
     document.querySelector("#initials-form").hidden = true;
-    message.textContent = board.rank ? `Accepted at rank ${board.rank}.` : "The cutoff changed; this run did not qualify.";
+    message.textContent = board.rank ? `Accepted at rank ${board.rank}.` : "Score saved. It is below the worldwide Top 15.";
     pendingRun = null;
   } catch (error) { message.textContent = `Submission failed: ${error.message}. Submit again or choose Skip score.`; }
   finally {
@@ -716,17 +744,21 @@ document.querySelector("#initials-form").addEventListener("submit", async event 
   }
 });
 
-async function preloadImages(imageUrls) {
+async function preloadImages(imageUrls, sources = {}) {
+  // Use the shorter viewport edge so rotation keeps the same mobile memory budget.
+  const compact = window.innerWidth <= 768 ||
+    (window.matchMedia("(pointer: coarse)").matches && Math.min(window.innerWidth, window.innerHeight) <= 768);
   let loaded = 0;
   await Promise.all(imageUrls.map(url => new Promise((resolve, reject) => {
+    const source = artworkSource(url, sources, compact);
     const image = new Image();
     image.onload = () => {
-      images.set(url, image);
+      images.set(url, { image, width: source.width || image.naturalWidth, height: source.height || image.naturalHeight });
       status.textContent = `Loading artwork… ${++loaded}/${imageUrls.length}`;
       resolve();
     };
     image.onerror = () => reject(new Error(`Could not load ${url}`));
-    image.src = url;
+    image.src = source.src;
   })));
 }
 
@@ -739,7 +771,7 @@ async function boot() {
   if (!runtimeResponse.ok) throw new Error(`Runtime manifest ${runtimeResponse.status}`);
   const assets = await assetsResponse.json();
   const runtimeFiles = await runtimeResponse.json();
-  await preloadImages(assets.images);
+  await preloadImages(assets.images, assets.imageSources);
   assets.effects.forEach(url => audio.preload(url));
   audio.preload(assets.initialSong);
   status.textContent = "Loading Ruby…";
