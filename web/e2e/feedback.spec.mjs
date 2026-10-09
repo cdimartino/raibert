@@ -2,19 +2,22 @@ import { expect, test } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 
 const emptyBoard = { version: 1, highScore: 0, entries: [] };
-async function bootRuby(page, start = true, board = emptyBoard) {
+async function bootRuby(page, start = true, board = emptyBoard, url = "/") {
   // Expose the existing VM only in the intercepted test response. Production
   // has no evaluation hook. All outcomes below are driven by real Ruby rules.
   await page.route("**/web/app.js", async route => {
-    const response = await route.fetch();
+    const response = await route.fetch({ url: route.request().url().replace("http://raibert-preview.test:9292", "http://127.0.0.1:9292") });
     const body = (await response.text()).replace(
       'vm.eval("load \'/app/web/boot.rb\'");',
       `globalThis.testRuby = vm; vm.eval("$LOAD_PATH.unshift('/app/web'); require '/app/game'; $test_window = RaiBertWindow.new; $test_window.show");`
     );
-    await route.fulfill({ response, body });
+    const instrumented = body.replace('const commands = JSON.parse(String(json));',
+      'const commands = JSON.parse(String(json)); globalThis.testCommands = commands;')
+      .replace('showEnding();', 'globalThis.testRunId = pendingRun.runId; showEnding();');
+    await route.fulfill({ response, body: instrumented });
   });
   await page.route("**/api/leaderboard", route => route.fulfill({ json: board }));
-  await page.goto("/");
+  await page.goto(url);
   await expect(page.locator("#status")).toBeHidden();
   if (start) await page.keyboard.press("Enter");
 }
@@ -165,7 +168,7 @@ test("menu Replay resets a real ended run and clears its submission", async ({ p
   await bootRuby(page);
   await finishRun(page, "game_over");
   await page.getByRole("button", { name: "Close leaderboard", exact: true }).click();
-  await page.locator("#game").click({ position: { x: 80, y: 180 } });
+  await page.locator("#game").click({ position: { x: 80, y: 180 }, delay: 650 });
   await page.getByRole("button", { name: "Replay", exact: true }).click();
   await expect(page.locator("#menu-dialog")).toBeHidden();
   await assertRestart(page);
@@ -302,5 +305,97 @@ test("optimized artwork keeps atlas geometry and the mobile decoded-memory budge
   await page.screenshot({ path: testInfo.outputPath("optimized-selection.png") });
   await page.keyboard.press("Enter");
   await page.screenshot({ path: testInfo.outputPath("optimized-gameplay.png") });
+  expect(errors).toEqual([]);
+});
+
+
+test("selection and controls scale and fit after phone rotation", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await bootRuby(page, false);
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 320, height: 568 }]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(() => page.locator("#game").evaluate(canvas => canvas.width)).toBe(
+      viewport.height > viewport.width ? 480 : Math.round(480 * viewport.width / viewport.height));
+    for (const screen of ["select", "options"]) {
+      if (screen === "options") await page.keyboard.press("KeyO");
+      await expect.poll(() => page.evaluate(() => globalThis.testCommands?.some(c => c.text === "OPTIONS") || false)).toBe(screen === "options");
+      const bounds = await page.evaluate(() => {
+        const canvas = document.querySelector("#game");
+        const text = testCommands.filter(c => c.kind === "text" && c.text);
+        return {
+          clipped: text.filter(c => c.x < -1 || c.y < -1 ||
+            c.x + RaiBertWeb.textWidth(c.size, c.family, c.text) * c.scale_x > canvas.width + 1 ||
+            c.y + c.size * c.scale_y > canvas.height + 1).map(c => c.text),
+          titleSize: text.find(c => c.text === "RAI*BERT" || c.text === "OPTIONS").size * canvas.clientHeight / canvas.height
+        };
+      });
+      expect(bounds.clipped).toEqual([]);
+      expect(bounds.titleSize).toBeGreaterThan(32);
+      await page.screenshot({ path: testInfo.outputPath(`${screen}-${viewport.width}.png`) });
+      if (screen === "options") await page.keyboard.press("Escape");
+    }
+  }
+});
+
+test("gameplay taps and cancelled holds do not pause; a long hold does", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await bootRuby(page, false);
+  await page.locator("#game").click({ position: { x: 195, y: 420 } });
+  expect(await ruby(page, '$test_window.instance_variable_get(:@screen).to_s')).toBe("game");
+  await page.locator("#game").click({ position: { x: 195, y: 420 } });
+  await expect(page.locator("#menu-dialog")).toBeHidden();
+  expect(await ruby(page, '$test_window.instance_variable_get(:@paused).to_s')).toBe("false");
+  await page.locator("#game").dispatchEvent("pointerdown", { pointerId: 1, pointerType: "touch", clientX: 195, clientY: 420 });
+  await page.locator("#game").dispatchEvent("pointermove", { pointerId: 1, pointerType: "touch", clientX: 208, clientY: 420 });
+  await page.waitForTimeout(650);
+  await expect(page.locator("#menu-dialog")).toBeHidden();
+  await page.locator("#game").dispatchEvent("pointercancel", { pointerId: 1, pointerType: "touch" });
+  await page.locator("#game").click({ position: { x: 195, y: 420 }, delay: 650 });
+  await expect(page.locator("#menu-dialog")).toBeVisible();
+  expect(await ruby(page, '$test_window.instance_variable_get(:@paused).to_s')).toBe("true");
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  expect(await ruby(page, '$test_window.instance_variable_get(:@paused).to_s')).toBe("false");
+});
+
+test("landscape results keep score entry and replay inside the screen", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await bootRuby(page);
+  await finishRun(page, "game_over");
+  for (const selector of ["#leaderboard-dialog", "#initials", "[data-submit-score]", "[data-skip]"]) {
+    const box = await page.locator(selector).boundingBox();
+    expect(box).not.toBeNull();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(844);
+    expect(box.y + box.height).toBeLessThanOrEqual(390);
+  }
+  await page.screenshot({ path: testInfo.outputPath("landscape-results.png") });
+  await page.getByRole("button", { name: "Skip score", exact: true }).click();
+  const replay = page.getByRole("button", { name: "Retry game", exact: true });
+  const box = await replay.boundingBox();
+  expect(box.y + box.height).toBeLessThanOrEqual(390);
+  await replay.click();
+  await assertRestart(page);
+});
+
+
+test("plain HTTP phone preview survives death and scoreboard replay", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("http://raibert-preview.test:9292/**", async route => {
+    const response = await route.fetch({ url: route.request().url().replace("http://raibert-preview.test:9292", "http://127.0.0.1:9292") });
+    await route.fulfill({ response });
+  });
+  await bootRuby(page, true, emptyBoard, "http://raibert-preview.test:9292/");
+  expect(await page.evaluate(() => isSecureContext)).toBe(false);
+  expect(await page.evaluate(() => typeof crypto.randomUUID)).toBe("undefined");
+  await finishRun(page, "game_over");
+  const runId = await page.evaluate(() => testRunId);
+  expect(runId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  await expect(page.locator("#status")).toBeHidden();
+  await page.getByRole("button", { name: "Skip score", exact: true }).click();
+  await page.getByRole("button", { name: "Retry game", exact: true }).click();
+  await assertRestart(page);
   expect(errors).toEqual([]);
 });

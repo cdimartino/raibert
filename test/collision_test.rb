@@ -171,3 +171,58 @@ assert(protected_idle.tick(1_200) == :hit, "persistent contact becomes hazardous
   assert(wrong.move(wrong_direction, 2_000) == :fall && wrong.lives == 2, "level #{level} alternate approach still falls")
   assert(wrong.rescues[side], "ineligible approach does not consume rescue")
 end
+
+# Spawns and movement reserve both ends of an in-flight object's path.
+occupied = GameState.new(random: ZeroRandom.new, now: 0)
+place_player(occupied, [3, 1])
+start_row, start_column = occupied.board.start
+occupied.instance_variable_set(:@pickup, { kind: :life, row: start_row, column: start_column, next_at: 10_000 })
+occupied.send(:spawn_enemy, 9_000)
+assert(occupied.enemies.empty?, "an enemy cannot spawn on a powerup")
+occupied.instance_variable_set(:@pickup, nil)
+next_row, next_column = occupied.board.neighbors(occupied.board.start).first.last
+occupied.enemies << { kind: :bug, row: next_row, column: next_column, from: occupied.board.start, moved_at: 8_900, next_at: 10_000 }
+occupied.send(:spawn_pickup, 9_000)
+assert(occupied.pickup.nil?, "a powerup cannot spawn on an enemy's in-flight origin")
+occupied.send(:spawn_pickup, 9_151)
+assert(occupied.pickup, "the vacated tile becomes available after the enemy lands")
+
+%i[bug regression exception].each do |kind|
+  avoiding = GameState.new(random: ZeroRandom.new, now: 0)
+  origin = avoiding.board.start
+  directions = kind == :exception ? GameState::DIRECTIONS.keys : %i[down_left down_right]
+  destinations = directions.filter_map { |direction| avoiding.board.connection(origin, direction)&.to }
+  enemy = { kind: kind, row: origin[0], column: origin[1], next_at: 0 }
+  avoiding.enemies << enemy
+  target = destinations.first
+  avoiding.instance_variable_set(:@pickup, { kind: :life, row: target[0], column: target[1] })
+  place_player(avoiding, target)
+  avoiding.send(:step_enemy, enemy, 100)
+  assert(enemy.values_at(:row, :column) != target, "#{kind} chooses a route away from the powerup")
+
+  waiting = GameState.new(random: ZeroRandom.new, now: 0)
+  waiting.enemies << (blocked = { kind: kind, row: origin[0], column: origin[1], next_at: 0 })
+  destinations.each { |row, column| waiting.enemies << { kind: :bug, row: row, column: column, next_at: 10_000 } }
+  waiting.send(:step_enemy, blocked, 100)
+  assert(waiting.enemies.include?(blocked) && blocked.values_at(:row, :column) == origin,
+         "#{kind} waits when all neighboring destinations are occupied")
+  assert(blocked[:next_at] > 100, "a blocked #{kind} schedules its next attempt")
+end
+
+blocked_pickup = GameState.new(random: ZeroRandom.new, now: 0)
+origin = blocked_pickup.board.start
+blocked_pickup.instance_variable_set(:@pickup, { kind: :life, row: origin[0], column: origin[1], next_at: 0 })
+%i[down_left down_right].each do |direction|
+  destination = blocked_pickup.board.connection(origin, direction)&.to
+  next unless destination
+
+  row, column = destination
+  blocked_pickup.enemies << { kind: :bug, row: row, column: column, next_at: 10_000 }
+end
+blocked_pickup.send(:step_pickup, 100)
+assert(blocked_pickup.pickup && blocked_pickup.pickup.values_at(:row, :column) == origin,
+       "a blocked powerup waits instead of overlapping an enemy or disappearing")
+blocked_pickup.enemies.clear
+blocked_pickup.send(:step_pickup, blocked_pickup.pickup[:next_at])
+assert(blocked_pickup.pickup.values_at(:row, :column) != origin, "a powerup resumes once a route is free")
+puts "Exclusive object occupancy checks passed"

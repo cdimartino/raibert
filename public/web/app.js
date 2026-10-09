@@ -67,7 +67,7 @@ function updateControlGuidance() {
     return [direction, Array.isArray(names) && names.length && names.every(name => typeof name === "string") ? names : fallback];
   }));
   const guidance = Object.entries(keys).map(([direction, names]) => `${direction.replace("_", "-")}: ${names.join(" or ").toUpperCase()}`).join("; ");
-  canvas.setAttribute("aria-label", `Rai*bert. Hop ${guidance}. Or swipe diagonally. O opens keyboard controls on selection or while paused.`);
+  canvas.setAttribute("aria-label", `Rai*bert. Hop ${guidance}. Or swipe diagonally. Hold to pause. O opens keyboard controls on selection or while paused.`);
 }
 
 function color(value) {
@@ -358,7 +358,7 @@ globalThis.RaiBertWeb = {
       while (hud.size > 10 && this.textWidth(hud.size, hud.family, hud.text) > canvas.width - 40) hud.size--;
       hud.x = (canvas.width - this.textWidth(hud.size, hud.family, hud.text)) / 2;
     } else {
-      commands.push({ kind: "text", text: label, x: 20, y: 12, size: Math.min(20, canvas.width / 24), family: "Menlo", scale_x: 1, scale_y: 1, color: recordColor, z: 1000, order: commands.length });
+      commands.push({ kind: "text", text: label, x: 20, y: 12, size: Math.min(26, canvas.width / 20), family: "Menlo", scale_x: 1, scale_y: 1, color: recordColor, z: 1000, order: commands.length });
     }
     canvas.dataset.highScore = label;
     canvas.dataset.newHigh = String(Boolean(hud && highScores.newHigh));
@@ -427,7 +427,7 @@ globalThis.RaiBertWeb = {
     }
     if (menuDialog.open) updateMenuPrimaryAction();
     if (!["game_over", "victory"].includes(previous.status) && ["game_over", "victory"].includes(gameState.status)) {
-      pendingRun = { runId: crypto.randomUUID(), score: gameState.score, stage: gameState.stage, difficulty: gameState.difficulty, outcome: gameState.status };
+      pendingRun = { runId: createRunId(), score: gameState.score, stage: gameState.stage, difficulty: gameState.difficulty, outcome: gameState.status };
       completedRun = { ...pendingRun, bonuses: { ...gameState.bonuses } };
       showEnding();
     }
@@ -457,8 +457,9 @@ function resizeGame() {
   const height = Math.max(320, Math.round(view?.height || innerHeight));
   surface.style.width = `${width}px`; surface.style.height = `${height}px`;
   const portrait = height > width;
-  const logicalWidth = portrait ? 760 : Math.round(760 * width / height);
-  const logicalHeight = portrait ? Math.round(760 * height / width) : 760;
+  const shortEdge = Math.min(760, Math.max(480, Math.min(width, height)));
+  const logicalWidth = portrait ? shortEdge : Math.round(shortEdge * width / height);
+  const logicalHeight = portrait ? Math.round(shortEdge * height / width) : shortEdge;
   if (resizeCallback) {
     canvas.width = logicalWidth; canvas.height = logicalHeight;
     resizeCallback(logicalWidth, logicalHeight);
@@ -468,12 +469,13 @@ function resizeGame() {
 addEventListener("resize", resizeGame);
 window.visualViewport?.addEventListener("resize", resizeGame);
 
+const MENU_HOLD_MS = 600;
 let gesture = null;
 canvas.addEventListener("pointerdown", event => {
   if (document.querySelector("dialog[open]")) return;
   if (gesture) { gesture.multitouch = true; clearTimeout(gesture.holdTimer); return; }
   gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now(), moved: false };
-  if (gameState.screen === "select") gesture.holdTimer = setTimeout(() => { if (gesture && !gesture.moved && !gesture.multitouch) { gesture = null; openMenu(); } }, 500);
+  gesture.holdTimer = setTimeout(() => { if (gesture && !gesture.moved && !gesture.multitouch) { gesture = null; openMenu(); } }, MENU_HOLD_MS);
   canvas.setPointerCapture(event.pointerId);
 });
 canvas.addEventListener("pointermove", event => {
@@ -481,7 +483,7 @@ canvas.addEventListener("pointermove", event => {
   if (Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > 10) { gesture.moved = true; clearTimeout(gesture.holdTimer); }
 });
 canvas.addEventListener("pointercancel", () => { clearTimeout(gesture?.holdTimer); gesture = null; });
-canvas.addEventListener("lostpointercapture", () => { if (gesture?.moved) gesture = null; });
+canvas.addEventListener("lostpointercapture", () => { clearTimeout(gesture?.holdTimer); gesture = null; });
 canvas.addEventListener("pointerup", event => {
   if (!gesture || gesture.id !== event.pointerId) return;
   const current = gesture; gesture = null;
@@ -489,8 +491,8 @@ canvas.addEventListener("pointerup", event => {
   if (current.multitouch) return;
   const dx = event.clientX - current.x, dy = event.clientY - current.y, elapsed = performance.now() - current.at;
   if (elapsed > 600 || Math.hypot(dx, dy) < 24) {
-    if (!current.moved && elapsed < 500) gameState.screen === "select" ? dispatchAction("confirm") : openMenu();
-    else if (!current.moved && elapsed >= 500 && gameState.screen === "select") openMenu();
+    if (!current.moved && elapsed < MENU_HOLD_MS && gameState.screen === "select") dispatchAction("confirm");
+    else if (!current.moved && elapsed >= MENU_HOLD_MS) openMenu();
     return;
   }
   if (gameState.screen === "select") {
@@ -606,6 +608,16 @@ async function loadLeaderboard(request = leaderboardRequest) {
     message.textContent = board ? "Offline — showing cached scores. You can retry submitting your score." : "Leaderboard unavailable. You can retry submitting your score or play again.";
     return { board, online: false };
   }
+}
+function createRunId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+
+  // Plain HTTP phone previews have getRandomValues but no randomUUID.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 async function sha256Hex(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));

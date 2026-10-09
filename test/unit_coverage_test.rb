@@ -50,6 +50,7 @@ movement.enemies << chaser
 movement.send(:step_enemy, chaser, 100)
 coverage_assert(chaser.values_at(:row, :column) == [1, 0], "exceptions chase the player")
 
+movement.enemies.clear
 regression = { kind: :regression, row: 0, column: 0, next_at: 0 }
 movement.enemies << regression
 movement.tiles[[1, 0]] = 1

@@ -250,7 +250,7 @@ class GameState
 
   def spawn_pickup(now)
     return if @pickup || now - @last_pickup_at < 8_000
-    return if @player == @board.start || @enemies.any? { |enemy| [enemy[:row], enemy[:column]] == @board.start }
+    return if @player == @board.start || object_occupies?(@board.start, now)
 
     kinds = PICKUP_KINDS.reject { |kind| kind == :life && @lives >= @starting_lives + 1 }
     @pickup = {
@@ -264,8 +264,15 @@ class GameState
     return unless @pickup && now >= @pickup[:next_at]
 
     from = [@pickup[:row], @pickup[:column]]
-    connection = descending_connection(@pickup)
-    return @pickup = nil unless connection
+    connection = descending_connection(@pickup, now)
+    unless connection
+      if %i[down_left down_right].any? { |direction| @board.connection(from, direction) }
+        @pickup[:next_at] = now + pickup_interval
+      else
+        @pickup = nil
+      end
+      return
+    end
 
     @pickup[:from] = from
     @pickup[:row], @pickup[:column] = connection.to
@@ -285,11 +292,11 @@ class GameState
     return if @player == @board.start
 
     kind = enemy_kind
-    row, column = if kind == :exception
-                    @board.farthest_tiles.sample(random: @random)
-                  else
-                    @board.start
-                  end
+    candidates = kind == :exception ? @board.farthest_tiles : [@board.start]
+    position = candidates.reject { |tile| object_occupies?(tile, now) }.sample(random: @random)
+    return unless position
+
+    row, column = position
     @enemies << { kind: kind, row: row, column: column, spawned_at: now, next_at: now + enemy_interval(kind) }
     @last_spawn_at = now
   end
@@ -319,13 +326,18 @@ class GameState
   def step_enemy(enemy, now)
     from = [enemy[:row], enemy[:column]]
     connection = if enemy[:kind] == :exception
-                   chasing_connection(enemy)
+                   chasing_connection(enemy, now)
                  else
-                   descending_connection(enemy)
+                   descending_connection(enemy, now)
                  end
 
     unless connection
-      @enemies.delete(enemy)
+      directions = enemy[:kind] == :exception ? DIRECTIONS.keys : %i[down_left down_right]
+      if directions.any? { |direction| @board.connection(from, direction) }
+        enemy[:next_at] = now + enemy_interval(enemy[:kind])
+      else
+        @enemies.delete(enemy)
+      end
       return
     end
 
@@ -348,14 +360,28 @@ class GameState
     chasing_connection(enemy)&.to
   end
 
-  def descending_connection(entity)
-    origin = [entity[:row], entity[:column]]
-    %i[down_left down_right].filter_map { |direction| @board.connection(origin, direction) }.sample(random: @random)
+  def object_occupies?(position, now, except: nil)
+    objects = @pickup ? [*@enemies, @pickup] : @enemies
+    objects.any? do |entity|
+      next false if entity.equal?(except)
+
+      entity.values_at(:row, :column) == position ||
+        (entity[:moved_at] && now < entity[:moved_at] + OBJECT_MOVE_TIME && entity[:from] == position)
+    end
   end
 
-  def chasing_connection(enemy)
-    origin = [enemy[:row], enemy[:column]]
-    choices = DIRECTIONS.keys.filter_map { |direction| @board.connection(origin, direction) }
+  def movement_connections(entity, directions, now)
+    origin = entity.values_at(:row, :column)
+    directions.filter_map { |direction| @board.connection(origin, direction) }
+              .reject { |connection| object_occupies?(connection.to, now, except: entity) }
+  end
+
+  def descending_connection(entity, now = Float::INFINITY)
+    movement_connections(entity, %i[down_left down_right], now).sample(random: @random)
+  end
+
+  def chasing_connection(enemy, now = Float::INFINITY)
+    choices = movement_connections(enemy, DIRECTIONS.keys, now)
     nearest = choices.map { |connection| graph_distance(connection.to, @player) }.min
     choices.select { |connection| graph_distance(connection.to, @player) == nearest }.sample(random: @random)
   end

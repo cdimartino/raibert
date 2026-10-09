@@ -174,6 +174,33 @@ selection = RaiBertWindow.new
   assert(labels.none? { |label| label.include?("BOOT") || label.include?("//") }, "essential selection guidance uses plain actions")
 end
 
+# Every board grows to the limiting viewport edge, including off-board rescue ships.
+responsive = RaiBertWindow.new
+responsive.press(:confirm)
+[[480, 1039], [480, 640], [1039, 480], [760, 1645], [760, 1013], [1645, 760], [1000, 760]].each do |width, height|
+  responsive.resize(width, height)
+  (1..GameState::LEVEL_COUNT).each do |level|
+    state = GameState.new(start_level: level)
+    responsive.instance_variable_set(:@game, state)
+    positions = state.board.tiles + state.board.ribbons.flat_map { |ribbon| ribbon.fetch(:path) } + state.board.rescues.keys.map { |origin, direction| state.board.fall_target(origin, direction) }
+    centers = positions.map { |position| responsive.send(:tile_center, position) }
+    tile = responsive.send(:tile_width)
+    xs, ys = centers.transpose
+    portrait = height > width
+    available_width = width - (portrait ? 28 : 80)
+    available_height = height - (portrait ? 158 : 118) - (portrait ? 28 : 86)
+    occupied_width = xs.max - xs.min + tile * 1.15
+    occupied_height = ys.max - ys.min + tile * 1.5
+    assert(occupied_width <= available_width + 0.001 && occupied_height <= available_height + 0.001,
+           "stage #{level} fits #{width}x#{height} with rescue space")
+    assert((occupied_width - available_width).abs < 0.001 || (occupied_height - available_height).abs < 0.001,
+           "stage #{level} fills the limiting viewport edge at #{width}x#{height}")
+    assert(ys.min - tile >= (portrait ? 158 : 118) - 0.001 && ys.max + tile * 0.5 <= height - (portrait ? 28 : 86) + 0.001,
+           "stage #{level} reserves vertical room for sprites and tile depth")
+    assert((xs.min + xs.max - width).abs < 0.001, "stage #{level} stays centered after resize")
+  end
+end
+
 # The real window reports life loss and sound on the same frame as idle contact.
 bridge.milliseconds = 0
 contact = RaiBertWindow.new
