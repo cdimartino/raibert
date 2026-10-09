@@ -121,9 +121,9 @@ class RaiBertWindow < Gosu::Window
   def initialize(start_level: 1, starting_lives: nil, difficulty: nil)
     super(WIDTH, HEIGHT, fullscreen: false)
     self.caption = "Rai*bert // ship it"
-    @font = Gosu::Font.new(20, name: "Menlo")
-    @small_font = Gosu::Font.new(14, name: "Menlo")
-    @title_font = Gosu::Font.new(52, name: "Menlo")
+    @font = Gosu::Font.new(26, name: "Menlo")
+    @small_font = Gosu::Font.new(20, name: "Menlo")
+    @title_font = Gosu::Font.new(56, name: "Menlo")
     @sprites = CHARACTERS.to_h do |character|
       path = File.join(__dir__, character[:path])
       [character[:id], Gosu::Image.load_tiles(path, 192, 208, tileable: false)]
@@ -532,68 +532,74 @@ class RaiBertWindow < Gosu::Window
   end
 
   def draw_select
-    center_text(@title_font, "RAI*BERT", viewport_width / 2 + 3, 61, 3.9, COLORS[:shadow])
-    center_text(@title_font, "RAI*BERT", viewport_width / 2, 58, 4, COLORS[:white])
-    center_text(@font, "A RUBY ARCADE ODYSSEY", viewport_width / 2, 124, 4, accent)
+    center = viewport_width / 2.0
+    title_y = portrait? ? 58 : 20
+    center_text(@title_font, "RAI*BERT", center + 3, title_y + 3, 3.9, COLORS[:shadow])
+    center_text(@title_font, "RAI*BERT", center, title_y, 4, COLORS[:white])
+    center_text(@font, "A RUBY ARCADE ODYSSEY", center, title_y + 66, 4, accent)
 
+    base_y = viewport_height - 176
+    panel_top = portrait? ? 180 : 108
+    panel_height = base_y - panel_top - 20
+    panel_width = portrait? ? viewport_width - 40 : [viewport_width / 2.0 - 40, panel_height * 1.2].min
     CHARACTERS.each_with_index do |character, index|
       next if portrait? && index != @selection
 
-      x = if portrait?
-            viewport_width / 2
-          else
-            viewport_width / 2 + (index.zero? ? -200 : 200)
-          end
+      x = portrait? ? center : center + (index.zero? ? -1 : 1) * viewport_width / 4.0
       selected = index == @selection
       border = selected ? COLORS[:green] : COLORS[:muted]
-      Gosu.draw_rect(x - 155, 190, 310, 390, COLORS[:panel], 2)
-      draw_border(x - 155, 190, 310, 390, border, 3)
-      draw_diamond(x, 421, 110, 27, selected ? accent : COLORS[:muted], 3)
+      Gosu.draw_rect(x - panel_width / 2, panel_top, panel_width, panel_height, COLORS[:panel], 2)
+      draw_border(x - panel_width / 2, panel_top, panel_width, panel_height, border, 3)
       image = sprite(character[:id], 0, (Gosu.milliseconds / 110) % 7)
-      image.draw(x - 96, 226 + Math.sin(Gosu.milliseconds / 450.0) * 5, 4, 1, 1)
-      center_text(@font, character[:name], x, 470, 4, selected ? COLORS[:white] : COLORS[:muted])
-      center_text(@small_font, character[:subtitle], x, 505, 4, COLORS[:muted])
-      center_text(@small_font, selected ? "> READY <" : "", x, 540, 4, COLORS[:green])
+      scale = [(panel_width - 32) / 220.0, (panel_height - 110) / 208.0].min
+      image_y = panel_top + (panel_height - 110 - 208 * scale) / 2 + 8
+      draw_diamond(x, image_y + 190 * scale, 110 * scale, 27 * scale, selected ? accent : COLORS[:muted], 3)
+      image.draw(x - 96 * scale, image_y + Math.sin(Gosu.milliseconds / 450.0) * 5, 4, scale, scale)
+      center_text(@font, character[:name], x, panel_top + panel_height - 100, 4, selected ? COLORS[:white] : COLORS[:muted], max_width: panel_width - 24)
+      center_text(@small_font, character[:subtitle], x, panel_top + panel_height - 65, 4, COLORS[:muted], max_width: panel_width - 24)
+      center_text(@small_font, selected ? "> READY <" : "", x, panel_top + panel_height - 32, 4, COLORS[:green])
     end
 
     difficulty = GameState::DIFFICULTIES.fetch(DIFFICULTY_KEYS.fetch(@difficulty_selection))
-    base_y = portrait? ? [viewport_height - 225, 600].max : 590
     choose = portrait? ? "Swipe left or right" : "#{binding_label(:select_left)}; #{binding_label(:select_right)}"
     change = portrait? ? "Swipe up or down" : "#{binding_label(:select_up)}; #{binding_label(:select_down)}"
-    center_text(@font, "Choose character: #{choose}", viewport_width / 2, base_y, 4, COLORS[:white])
-    center_text(@font, "Change difficulty: #{change}", viewport_width / 2, base_y + 30, 4, COLORS[:white])
-    center_text(@small_font, "#{difficulty[:label]}: #{difficulty[:note].gsub(' // ', ' — ')}", viewport_width / 2, base_y + 58, 4, accent)
-    center_text(@font, "Start game: #{portrait? ? 'Tap' : binding_label(:confirm)}", viewport_width / 2, base_y + 88, 4, COLORS[:green])
+    center_text(@font, "Choose character: #{choose}", center, base_y, 4, COLORS[:white])
+    center_text(@font, "Change difficulty: #{change}", center, base_y + 34, 4, COLORS[:white])
+    center_text(@small_font, "#{difficulty[:label]}: #{difficulty[:note].gsub(' // ', ' — ')}", center, base_y + 68, 4, accent)
+    center_text(@font, "Start game: #{portrait? ? 'Tap' : binding_label(:confirm)}", center, base_y + 102, 4, COLORS[:green])
     help = portrait? ? "Menu: hold" : "Controls: #{binding_label(:options)}   Pause: #{binding_label(:pause)}   Mute: #{binding_label(:mute)}"
-    center_text(@small_font, help, viewport_width / 2, base_y + 124, 4, COLORS[:muted])
+    center_text(@small_font, help, center, base_y + 140, 4, COLORS[:muted])
   end
 
   def draw_options
-    center_text(@title_font, "OPTIONS", viewport_width / 2, 72, 4, COLORS[:white])
-    center_text(@small_font, "Choose a direction, then #{binding_label(:confirm)} to change", viewport_width / 2, 132, 4, COLORS[:muted])
-    center_text(@font, "#{binding_label(:up_left)} ↖      ↗ #{binding_label(:up_right)}", viewport_width / 2, 164, 4, COLORS[:green])
-    center_text(@font, "#{binding_label(:down_left)} ↙      ↘ #{binding_label(:down_right)}", viewport_width / 2, 191, 4, COLORS[:green])
+    center = viewport_width / 2.0
+    top = [0, (viewport_height - 720) / 2.0].max
+    row_step = [52, (viewport_height - 260) / OPTIONS_ACTIONS.length.to_f].min
+    center_text(@title_font, "OPTIONS", center, top + 12, 4, COLORS[:white])
+    center_text(@small_font, "Select direction; #{binding_label(:confirm)}: change", center, top + 76, 4, COLORS[:muted])
+    center_text(@font, "#{binding_label(:up_left)} ↖  ↗ #{binding_label(:up_right)}    #{binding_label(:down_left)} ↙  ↘ #{binding_label(:down_right)}", center, top + 108, 4, COLORS[:green])
 
     OPTIONS_ACTIONS.each_with_index do |action, index|
       selected = index == @options_selection
-      y = 236 + index * 52
+      y = top + 146 + index * row_step
       color = selected ? COLORS[:green] : COLORS[:muted]
-      left = viewport_width / 2 - 230
-      Gosu.draw_rect(left, y, 460, 46, COLORS[:panel], 2)
-      draw_border(left, y, 460, 46, color, 3)
-      @font.draw_text(selected ? ">" : " ", left + 22, y + 12, 4, 1, 1, color)
+      left = center - 230
+      Gosu.draw_rect(left, y, 460, row_step - 4, COLORS[:panel], 2)
+      draw_border(left, y, 460, row_step - 4, color, 3)
+      @font.draw_text(selected ? ">" : " ", left + 12, y + 2, 4, 1, 1, color)
       label = MOVE_LABELS[action] || (action == :diamond_preset ? "PRESET: Q R above S D" : "RESET DEFAULT CONTROLS")
-      @font.draw_text(label, left + 60, y + 12, 4, 1, 1, COLORS[:white])
+      @font.draw_text(label, left + 42, y + 2, 4, 1, 1, COLORS[:white])
       if MOVE_ACTIONS.include?(action)
         binding = binding_label(action)
         scale = [1.0, 118.0 / [@small_font.text_width(binding), 1].max].min
-        @small_font.draw_text(binding, left + 330, y + 14, 4, scale, scale, color)
+        @small_font.draw_text(binding, left + 330, y + 6, 4, scale, scale, color)
       end
     end
 
+    bottom = top + 146 + OPTIONS_ACTIONS.length * row_step
     prompt = @rebinding_action ? "PRESS NEW KEY FOR #{MOVE_LABELS.fetch(@rebinding_action)}" : @options_message
-    center_text(@font, prompt.to_s, viewport_width / 2, 580, 4, COLORS[:amber])
-    center_text(@small_font, "Arrow keys: choose   #{binding_label(:confirm)}: apply   #{binding_label(:pause)}: back", viewport_width / 2, 654, 4, COLORS[:muted])
+    center_text(@font, prompt.to_s, center, bottom + 16, 4, COLORS[:amber])
+    center_text(@small_font, "Up/down: choose   #{binding_label(:confirm)}: apply   #{binding_label(:pause)}: back", center, bottom + 64, 4, COLORS[:muted])
   end
 
   def draw_game
@@ -626,8 +632,9 @@ class RaiBertWindow < Gosu::Window
     hud_height = portrait? ? 112 : 80
     Gosu.draw_rect(16, 12, viewport_width - 32, hud_height, 0xe609101e, 4.9)
     Gosu.draw_rect(16, 12, 3, hud_height, accent, 5)
-    @small_font.draw_text(format("STAGE %02d  %s // %s", @game.stage,
-                                 LEVEL_NAMES.fetch(@game.level - 1), @game.board.name), 28, 22, 5, 1, 1, accent)
+    heading = portrait? ? format("STAGE %02d // %s", @game.stage, @game.board.name) :
+                           format("STAGE %02d  %s // %s", @game.stage, LEVEL_NAMES.fetch(@game.level - 1), @game.board.name)
+    @small_font.draw_text(heading, 28, 22, 5, 1, 1, accent)
     @small_font.draw_text(format("PASS %02d/%02d  LIVES %02d  %s", fixed, @game.tiles.length, @game.lives, @game.difficulty.to_s.upcase), 28, 48, 5, 1, 1, COLORS[:white])
     center_text(@font, format("SCORE %07d // WORLD %s", @game.score, world), viewport_width / 2, portrait? ? 78 : 22, 5, COLORS[:white])
     @small_font.draw_text(@muted ? "MUTED" : "SOUND ON", viewport_width - 112, 54, 5, 1, 1, COLORS[:muted]) unless portrait?
@@ -724,7 +731,7 @@ class RaiBertWindow < Gosu::Window
 
       position = @game.board.fall_target(origin, direction)
       x, y = tile_center(position)
-      draw_object(:rescue, x, y + 10, [tile_width, 92].min, 3.2)
+      draw_object(:rescue, x, y + 10, tile_width, 3.2)
     end
   end
 
@@ -755,7 +762,7 @@ class RaiBertWindow < Gosu::Window
     progress = pickup[:moved_at] ? [[(game_time - pickup[:moved_at]) / GameState::OBJECT_MOVE_TIME.to_f, 0].max, 1].min : 1
     x, y = tile_center(motion_position(pickup, destination, progress))
     y += Math.sin(game_time / 220.0) * 4 - 4
-    size = [tile_width * 0.62, 56].min
+    size = tile_width * 0.62
     POWERUP_STYLES.key?(pickup[:kind]) ? draw_powerup(pickup[:kind], x, y, size, 3.5) : draw_object(pickup[:kind], x, y, size, 3.5)
   end
 
@@ -764,7 +771,7 @@ class RaiBertWindow < Gosu::Window
       destination = [enemy[:row], enemy[:column]]
       progress = enemy[:moved_at] ? [[(game_time - enemy[:moved_at]) / GameState::OBJECT_MOVE_TIME.to_f, 0].max, 1].min : 1
       x, y = tile_center(motion_position(enemy, destination, progress))
-      draw_object(enemy[:kind], x, y + 6 + Math.sin(game_time / 170.0 + x) * 2, [tile_width * 0.72, 65].min, 3.4)
+      draw_object(enemy[:kind], x, y + 6 + Math.sin(game_time / 170.0 + x) * 2, tile_width * 0.72, 3.4)
       center_text(@small_font, "UNDO −1", x, y - 26, 4.4, COLORS[:amber]) if enemy[:kind] == :regression
     end
   end
@@ -804,7 +811,7 @@ class RaiBertWindow < Gosu::Window
     y -= Math.sin(jump_progress * Math::PI) * 34 if jump_progress
     image = sprite(@character, row, frame)
     alpha = @game.invulnerable?(now) && (now / 100).even? ? Gosu::Color.new(0x66_ffffff) : Gosu::Color::WHITE
-    scale = (@character == :voxel ? 0.34 : 0.32) * [tile_width / TILE_WIDTH.to_f, 1].min
+    scale = (@character == :voxel ? 0.34 : 0.32) * (tile_width / TILE_WIDTH.to_f)
     image.draw(x - 96 * scale, y - 180 * scale, 4, scale, scale, alpha)
   end
 
@@ -894,8 +901,8 @@ class RaiBertWindow < Gosu::Window
     top = (viewport_height - 155) / 2
     Gosu.draw_rect(left, top, width, 155, Gosu::Color.new(0xee_08100d), 10)
     draw_border(left, top, width, 155, color, 11)
-    center_text(@title_font, title, viewport_width / 2, top + 23, 12, color)
-    center_text(@small_font, subtitle, viewport_width / 2, top + 107, 12, COLORS[:white])
+    center_text(@title_font, title, viewport_width / 2, top + 23, 12, color, max_width: width - 32)
+    center_text(@small_font, subtitle, viewport_width / 2, top + 107, 12, COLORS[:white], max_width: width - 32)
   end
 
   def viewport_width = @viewport_width || WIDTH
@@ -925,14 +932,14 @@ class RaiBertWindow < Gosu::Window
     available_width = viewport_width - (portrait? ? 28 : 80)
     available_height = viewport_height - top_limit - bottom_limit
     width_units = max_x - min_x + 1.15
-    height_units = (max_y - min_y) * 0.76 + 1.15
-    width = [TILE_WIDTH, available_width / width_units, available_height / height_units].min
+    height_units = (max_y - min_y) * 0.76 + 1.5
+    width = [available_width / width_units, available_height / height_units].min
     rendered_width = (max_x - min_x) * width
     rendered_height = (max_y - min_y) * width * 0.76
     {
       tile_width: width, min_x: min_x, min_y: min_y,
       left: (viewport_width - rendered_width) / 2.0,
-      top: top_limit + (available_height - rendered_height) / 2.0
+      top: top_limit + width + (available_height - rendered_height - width * 1.5) / 2.0
     }
   end
 
@@ -992,9 +999,9 @@ class RaiBertWindow < Gosu::Window
     Gosu.draw_rect(x + width - 2, y, 2, height, color, z)
   end
 
-  def center_text(font, text, x, y, z, color)
+  def center_text(font, text, x, y, z, color, max_width: viewport_width - 32)
     width = font.text_width(text)
-    scale = [1.0, (viewport_width - 32).to_f / [width, 1].max].min
+    scale = [1.0, max_width.to_f / [width, 1].max].min
     font.draw_text(text, x - width * scale / 2.0, y, z, scale, scale, color)
   end
 

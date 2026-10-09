@@ -4,8 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$ROOT/build/web-runtime"
 PUBLIC="$ROOT/public/web"
-RUBY_IMAGE="ruby@sha256:c88f8a06d935a379623b476680a7aeaf03c85e3f52949a919287dbff62cce3b1"
-NODE_IMAGE="node@sha256:de2d8c00f6b1938eefdf575b5c1efa314a48dd8842a5983ec275cb11e8e6685c"
+# Docker's public mirror avoids anonymous Docker Hub pull limits on CI runners.
+RUBY_IMAGE="public.ecr.aws/docker/library/ruby@sha256:c88f8a06d935a379623b476680a7aeaf03c85e3f52949a919287dbff62cce3b1"
+NODE_IMAGE="public.ecr.aws/docker/library/node@sha256:de2d8c00f6b1938eefdf575b5c1efa314a48dd8842a5983ec275cb11e8e6685c"
 RUBY_TARBALL_SHA256="911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
 BASE_CACHE_KEY="cruby-4.0.7-wasi-sdk-24-ruby-wasm-2.10.1-$RUBY_TARBALL_SHA256"
 

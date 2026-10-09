@@ -41,7 +41,7 @@ origin = game.board.start
 regression = { kind: :regression, row: origin[0], column: origin[1] }
 # Choose one real descending edge deterministically for this unit fixture.
 connection = [:down_left, :down_right].filter_map { |direction| game.connection_for(origin, direction) }.first
-game.define_singleton_method(:descending_connection) { |_enemy| connection }
+game.define_singleton_method(:descending_connection) { |_enemy, _now| connection }
 destination = connection.to
 game.tiles[destination] = game.target
 game.send(:step_enemy, regression, 1_000)

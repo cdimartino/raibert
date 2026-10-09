@@ -17,14 +17,14 @@ Rai*bert is a fast Q*bert-inspired arcade game built in Ruby. Turn every failing
 
 - A complete 20-stage campaign across Easy, Normal, and Hard, progressing from ruby cuts to original impossible stair boards.
 - Two playable Rais, three enemy behaviors, five powerups, rescue platforms, and unique level themes.
-- True full-screen play on desktop and mobile with keyboard or gesture input.
+- Responsive boards, selection screens, menus, and larger text on desktop and mobile, with keyboard or gesture input.
 - An optional movable touch D-pad that remembers where you put it.
 - A shared worldwide Top 15 with arcade-style three-letter initials.
 - The same deterministic Ruby rules on native Gosu and Ruby/Wasm in the browser.
 
 ## How to play
 
-Land on every tile until the board is green. Each stage introduces a different board shape; later boards add holes, loops, and glowing impossible stair connections. Avoid enemies, collect falling powerups, and use each side rescue once. Later stages need multiple landings per tile. There are no checkpoints: a failed build starts a new run.
+Land on every tile until the board is green. Each stage introduces a different board shape; later boards add holes, loops, and glowing impossible stair connections. Avoid enemies, collect falling powerups, and use each side rescue once. Later stages need multiple landings per tile. Enemies and powerups reserve separate tiles when spawning and moving; blocked objects wait or use another available route. There are no checkpoints: a failed build starts a new run.
 
 ### Desktop
 
@@ -42,7 +42,7 @@ Gold marks and arrows show each rescue ship’s exact launch tile and direction.
 
 ### Mobile
 
-Swipe diagonally to hop. On the selection screen, swipe horizontally for a character, vertically for difficulty, and tap to start. Tap during play to pause; hold on selection to open the menu. A compact draggable D-pad is available from the menu and is hidden by default.
+Swipe diagonally to hop. On the selection screen, swipe horizontally for a character, vertically for difficulty, and tap to start. Hold still for 0.6 seconds during play to pause or on selection to open the menu. Quick taps during play are ignored. A compact draggable D-pad is available from the menu and is hidden by default.
 
 After a loss or victory, an animated ending with a custom sound leads into the leaderboard. The result panel retains your final score, stage, and earned bonuses. The footer shows **Submit score** / **Skip score**, then replaces those actions with **Retry game** after submission or an explicit skip. **Refresh** only reloads the leaderboard.
 

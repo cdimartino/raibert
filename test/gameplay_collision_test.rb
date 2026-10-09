@@ -51,6 +51,9 @@ def validate_game(game, difficulty, frame)
          "enemies remain on valid tiles at frame #{frame}")
   assert(!game.pickup || game.valid?(game.pickup.values_at(:row, :column)),
          "powerup remains on a valid tile at frame #{frame}")
+  objects = game.pickup ? [*game.enemies, game.pickup] : game.enemies
+  positions = objects.map { |object| object.values_at(:row, :column) }
+  assert(positions.uniq.length == positions.length, "enemies and powerups occupy distinct tiles at frame #{frame}")
   assert(game.lives.between?(0, 100), "lives remain in range at frame #{frame}")
 end
 
