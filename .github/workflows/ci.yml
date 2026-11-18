@@ -6,6 +6,11 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+    inputs:
+      magneto:
+        description: Run a disposable x86 canary on this non-main ref
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,19 +22,29 @@ concurrency:
 jobs:
   ruby:
     name: Ruby unit & integration
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main') && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 60
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
       - name: Install Gosu system dependencies
+        if: runner.environment == 'github-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install --yes \
             libfontconfig1-dev libgl1-mesa-dev libmpg123-dev libopenal-dev \
             libsdl2-dev libsdl2-ttf-dev libsndfile1-dev
 
+      - name: Install gems on the disposable runner
+        if: runner.environment == 'self-hosted'
+        run: |
+          ruby -e 'abort "unexpected Ruby version" unless RUBY_VERSION == "4.0.7"'
+          bundle config set --local path vendor/bundle
+          bundle install
+
       - name: Set up Ruby
+        if: runner.environment == 'github-hosted'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.7
@@ -66,20 +81,36 @@ jobs:
 
   browser:
     name: Browser end-to-end
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main') && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 60
     env:
       BUNDLE_WITHOUT: desktop
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Install gems on the disposable runner
+        if: runner.environment == 'self-hosted'
+        run: |
+          ruby -e 'abort "unexpected Ruby version" unless RUBY_VERSION == "4.0.7"'
+          bundle config set --local path vendor/bundle
+          bundle install
+
       - name: Set up Ruby
+        if: runner.environment == 'github-hosted'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.7
           bundler-cache: true
 
+      - name: Check image browser toolchain
+        if: runner.environment == 'self-hosted'
+        run: |
+          test "$(node -v)" = v22.20.0
+          echo 'PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers' >> "$GITHUB_ENV"
+
       - name: Set up Node.js
+        if: runner.environment == 'github-hosted'
         uses: actions/setup-node@v6
         with:
           node-version: 22.20.0
@@ -87,9 +118,11 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Install browser test dependencies
-        run: |
-          npm ci --prefix web
-          npx --prefix web playwright install --with-deps chromium
+        run: npm ci --prefix web
+
+      - name: Install Chromium on hosted runner
+        if: runner.environment == 'github-hosted'
+        run: npx --prefix web playwright install --with-deps chromium
 
       - name: Rebuild Ruby WebAssembly application
         run: script/build_web
