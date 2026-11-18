@@ -55,7 +55,8 @@ docker run --rm --platform linux/amd64 \
     /work/build/toolchain/wasi-sdk-24.0/bin/llvm-strip --strip-debug /work/ruby-app.wasm
     mkdir -p /work/licenses
     cp /work/ruby-4.0.7/COPYING /work/licenses/CRuby-COPYING
-    cp /src/public/web/licenses/Ruby-logo-NOTICE /work/licenses/Ruby-logo-NOTICE
+    # Container-owned release notices must be readable by the packaging user.
+    install -m 0644 /src/public/web/licenses/Ruby-logo-NOTICE /work/licenses/Ruby-logo-NOTICE
   '
 
 docker run --rm --platform linux/amd64 \
