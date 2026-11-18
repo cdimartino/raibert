@@ -16,3 +16,9 @@ Rebuild the committed Wasm runtime with `script/build_web` after changing Ruby g
 - Keep commits reviewable and describe risk, verification, and screenshots in the PR.
 
 By contributing, you agree that your work is licensed under the project’s MIT License.
+
+### Where CI runs
+
+The repository variable `RAIBERT_CI_POOL` controls both automatic CI jobs (`push` to `main` and pull requests). With the variable unset, jobs run on GitHub-hosted Ubuntu. Set it to `magneto` only after unattended runner registration and remote administration have been verified. Each job then requests its own disposable Linux x64 guest. Runner selection does not fall back automatically when a host is offline.
+
+To roll back, delete `RAIBERT_CI_POOL` or set it to `hosted`, then trigger a **new workflow run**. Changing the variable does not move a job that is already queued. For manual diagnostics, dispatch `CI` on a non-main branch with `magneto` checked; leaving it unchecked always selects hosted Ubuntu. A manual dispatch on `main` always uses hosted Ubuntu and can trigger production deployment, so use a non-main ref for diagnostics.
