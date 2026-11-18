@@ -1,114 +1,28 @@
-name: CI
-
+name: Magneto lifecycle acceptance
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   workflow_dispatch:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
+    inputs:
+      mode:
+        type: choice
+        description: Expected runner teardown path
+        options: [failure, cancellation]
+        required: true
+permissions: {}
 jobs:
-  ruby:
-    name: Ruby unit & integration
-    runs-on: ubuntu-latest
+  probe:
+    name: Disposable guest teardown
+    if: github.ref == 'refs/heads/ci/magneto-lifecycle-probe'
+    runs-on: [self-hosted, Linux, X64, homelab-linux-x64]
+    timeout-minutes: 10
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Install Gosu system dependencies
+      - name: Assert clean guest and leave disposable marker
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes \
-            libfontconfig1-dev libgl1-mesa-dev libmpg123-dev libopenal-dev \
-            libsdl2-dev libsdl2-ttf-dev libsndfile1-dev
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: 4.0.7
-          bundler-cache: true
-
-      - name: Enforce 100% GameState unit coverage
-        run: bundle exec ruby test/unit_coverage_test.rb
-
-      - name: Test leaderboard ranking and validation domain
-        run: ruby test/leaderboard_test.rb
-
-      - name: Test analytics collector and WAF request boundaries
-        run: |
-          ruby test/analytics_test.rb
-          ruby test/waf_test.rb
-
-      - name: Run browser shim and HTTP integration tests
-        run: |
-          ruby test/web_shim_test.rb
-          bundle exec ruby test/rack_test.rb
-          bundle exec ruby test/site_test.rb
-          ruby test/deploy_site_test.rb
-
-      - name: Run deterministic full-campaign simulation
-        run: bundle exec ruby test/gameplay_collision_test.rb
-
-      - name: Upload unit coverage report
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: unit-coverage
-          path: coverage/unit.json
-          if-no-files-found: error
-
-  browser:
-    name: Browser end-to-end
-    runs-on: ubuntu-latest
-    env:
-      BUNDLE_WITHOUT: desktop
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: 4.0.7
-          bundler-cache: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22.20.0
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install browser test dependencies
-        run: |
-          npm ci --prefix web
-          npx --prefix web playwright install --with-deps chromium
-
-      - name: Rebuild Ruby WebAssembly application
-        run: script/build_web
-
-      - name: Run Web Audio unit tests
-        run: |
-          npm --prefix web test
-          node test/analytics_test.mjs
-
-      - name: Run Chromium end-to-end tests
-        run: npm --prefix web run test:e2e
-
-      - name: Upload Playwright diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v6
-        with:
-          name: playwright-report
-          path: |
-            web/playwright-report
-            web/test-results
-          if-no-files-found: ignore
-          retention-days: 14
+          test ! -e /tmp/magneto-teardown-marker
+          echo "$GITHUB_RUN_ID" > /tmp/magneto-teardown-marker
+          uname -m
+      - name: Deliberate nonzero test result
+        if: inputs.mode == 'failure'
+        run: exit 17
+      - name: Wait for GitHub cancellation
+        if: inputs.mode == 'cancellation'
+        run: sleep 480
