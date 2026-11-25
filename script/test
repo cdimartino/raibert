@@ -1,19 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Usage: script/test [unit] [simulation] [e2e [PLAYWRIGHT_ARGS...]]
+# With no group, runs every group. CI runs the same groups as separate jobs.
+#   unit        Ruby and Node unit/integration checks (seconds; needs the desktop gems for Gosu)
+#   simulation  deterministic full-campaign runs on every difficulty (about two minutes)
+#   e2e         Playwright against the committed or freshly built web runtime; later arguments
+#               go to Playwright, e.g. `script/test e2e --shard=1/2`
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-bundle exec ruby test/unit_coverage_test.rb
-ruby test/board_layouts_test.rb
-ruby test/leaderboard_test.rb
-ruby test/analytics_test.rb
-node test/analytics_test.mjs
-node test/telemetry_test.mjs
-ruby test/web_shim_test.rb
-bundle exec ruby test/rack_test.rb
-bundle exec ruby test/site_test.rb
-ruby test/deploy_site_test.rb
-bundle exec ruby test/gameplay_collision_test.rb
-npm --prefix web test
-npm --prefix web run test:e2e
+unit() {
+  # Also loads scoring, collision, smoke, leaderboard and board-layout tests under coverage.
+  bundle exec ruby test/unit_coverage_test.rb
+  ruby test/analytics_test.rb
+  ruby test/waf_test.rb
+  ruby test/web_shim_test.rb
+  bundle exec ruby test/rack_test.rb
+  bundle exec ruby test/site_test.rb
+  ruby test/deploy_site_test.rb
+  node test/analytics_test.mjs
+  node test/telemetry_test.mjs
+  npm --prefix web test
+}
+
+simulation() {
+  bundle exec ruby test/gameplay_collision_test.rb
+}
+
+e2e() {
+  npm --prefix web run test:e2e -- "$@"
+}
+
+if [ "$#" -eq 0 ]; then
+  set -- unit simulation e2e
+fi
+
+while [ "$#" -gt 0 ]; do
+  group="$1"
+  shift
+  case "$group" in
+    unit | simulation) "$group" ;;
+    e2e)
+      e2e "$@"
+      exit 0
+      ;;
+    *)
+      echo "Unknown test group: $group (expected unit, simulation or e2e)" >&2
+      exit 64
+      ;;
+  esac
+done

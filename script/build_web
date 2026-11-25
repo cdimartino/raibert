@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Builds the browser runtime in three cached layers under build/web-runtime:
+#   base/  stripped CRuby WebAssembly interpreter; rebuilt only when the Ruby, WASI or ruby.wasm pins change
+#   out/   packed game WebAssembly, JavaScript loader and licenses; rebuilt only when an input below changes
+#   public/web receives a copy of out/ every run.
+# `script/build_web --cache-keys` prints both signatures (for CI cache keys) without building anything.
+# Set WASM_DEBUG=1 to also write build/web-runtime/ruby-app.debug.wasm with DWARF sections for diagnostics.
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$ROOT/build/web-runtime"
 PUBLIC="$ROOT/public/web"
@@ -9,82 +16,128 @@ RUBY_IMAGE="public.ecr.aws/docker/library/ruby@sha256:c88f8a06d935a379623b476680
 NODE_IMAGE="public.ecr.aws/docker/library/node@sha256:de2d8c00f6b1938eefdf575b5c1efa314a48dd8842a5983ec275cb11e8e6685c"
 RUBY_TARBALL_SHA256="911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
 BASE_CACHE_KEY="cruby-4.0.7-wasi-sdk-24-ruby-wasm-2.10.1-$RUBY_TARBALL_SHA256"
+BASE_INPUTS=(web/Gemfile.lock web/ruby_wasm-local-headers.patch web/cruby-no-fsync.patch)
+# Files packed into the Ruby app at /app. They are also the app signature, so add new game files here.
+APP_FILES=(game.rb lib/board_layouts.rb lib/game_state.rb lib/demo_window.rb config/controls.json web/gosu.rb web/boot.rb)
+# Everything else that changes the packed WebAssembly, the bundled loader or the shipped licenses.
+APP_INPUTS=(script/build_web web/Gemfile web/runtime_entry.js web/package.json web/package-lock.json
+  public/web/licenses/Ruby-logo-NOTICE)
 
-command -v docker >/dev/null || { echo "Docker is required to rebuild the web runtime." >&2; exit 1; }
-docker info >/dev/null || { echo "Docker is not running." >&2; exit 1; }
-mkdir -p "$WORK" "$PUBLIC"
+cd "$ROOT"
 
-docker run --rm --platform linux/amd64 \
-  -e BASE_CACHE_KEY="$BASE_CACHE_KEY" \
-  -e RUBY_WASM_JOBS="${RUBY_WASM_JOBS:-2}" \
-  -v "$ROOT:/src" -v "$WORK:/work" -w /work "$RUBY_IMAGE" bash -lc '
-    set -euo pipefail
-    cp /src/web/Gemfile /src/web/Gemfile.lock /work/
-    export BUNDLE_GEMFILE=/work/Gemfile
-    bundle config set path /work/bundle >/dev/null
-    bundle install --quiet
-    RUBY_WASM_DIR=$(bundle show ruby_wasm)
-    bundle pristine ruby_wasm >/dev/null
-    patch -d "$RUBY_WASM_DIR" -p1 < /src/web/ruby_wasm-local-headers.patch
-    BASE_SIGNATURE=$(printf "%s\n%s\n%s\n%s\n" "$BASE_CACHE_KEY" \
-      "$(sha256sum /src/web/Gemfile.lock)" \
-      "$(sha256sum /src/web/ruby_wasm-local-headers.patch)" \
-      "$(sha256sum /src/web/cruby-no-fsync.patch)" | sha256sum | cut -d " " -f 1)
-    if [ ! -f /work/ruby-base.wasm ] || [ ! -f /work/ruby-base.signature ] || [ "$(cat /work/ruby-base.signature)" != "$BASE_SIGNATURE" ]; then
-      rm -rf /work/build /work/rubies /work/ruby-4.0.7
-      curl -fsSL https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz -o /work/ruby-4.0.7.tar.gz
-      echo "'"$RUBY_TARBALL_SHA256"'  /work/ruby-4.0.7.tar.gz" | sha256sum -c -
-      tar -xzf /work/ruby-4.0.7.tar.gz -C /work
-      patch -d /work/ruby-4.0.7 -p1 < /src/web/cruby-no-fsync.patch
-      bundle exec rbwasm build --ruby-version /work/ruby-4.0.7 \
-        --target wasm32-unknown-wasip1 --build-profile full --stdlib \
-        -o /work/ruby-base.wasm
-      echo "$BASE_SIGNATURE" > /work/ruby-base.signature
-    fi
+# Matches the signature format earlier builds stored in build/web-runtime/ruby-base.signature.
+BASE_SIGNATURE="$(ruby -rdigest -e '
+  key, *files = ARGV
+  lines = [key] + files.map { |file| "#{Digest::SHA256.file(file).hexdigest}  /src/#{file}" }
+  puts Digest::SHA256.hexdigest(lines.map { |line| "#{line}\n" }.join)
+' "$BASE_CACHE_KEY" "${BASE_INPUTS[@]}")"
+APP_SIGNATURE="$(ruby -rdigest -e '
+  base, *files = ARGV
+  lines = [base] + files.map { |file| "#{file} #{Digest::SHA256.file(file).hexdigest}" }
+  puts Digest::SHA256.hexdigest(lines.join("\n"))
+' "$BASE_SIGNATURE" "${APP_FILES[@]}" "${APP_INPUTS[@]}")"
 
-    rm -rf /work/app /work/ruby-app.wasm
-    install -D /src/game.rb /work/app/game.rb
-    install -D /src/lib/board_layouts.rb /work/app/lib/board_layouts.rb
-    install -D /src/lib/game_state.rb /work/app/lib/game_state.rb
-    install -D /src/lib/demo_window.rb /work/app/lib/demo_window.rb
-    install -D /src/config/controls.json /work/app/config/controls.json
-    install -D /src/web/gosu.rb /work/app/web/gosu.rb
-    install -D /src/web/boot.rb /work/app/web/boot.rb
-    bundle exec rbwasm pack /work/ruby-base.wasm --dir /work/app::/app -o /work/ruby-app.wasm
-    cp /work/ruby-app.wasm /work/ruby-app.debug.wasm
-    /work/build/toolchain/wasi-sdk-24.0/bin/llvm-strip --strip-debug /work/ruby-app.wasm
-    mkdir -p /work/licenses
-    cp /work/ruby-4.0.7/COPYING /work/licenses/CRuby-COPYING
-    # Container-owned release notices must be readable by the packaging user.
-    install -m 0644 /src/public/web/licenses/Ruby-logo-NOTICE /work/licenses/Ruby-logo-NOTICE
-  '
+if [ "${1:-}" = "--cache-keys" ]; then
+  echo "base=$BASE_SIGNATURE"
+  echo "app=$APP_SIGNATURE"
+  exit 0
+fi
 
-docker run --rm --platform linux/amd64 \
-  -v "$ROOT:/src" -v "$WORK:/work" -w /work "$NODE_IMAGE" bash -lc '
-    set -euo pipefail
-    rm -rf /work/node
-    mkdir -p /work/node /work/licenses
-    cp /src/web/runtime_entry.js /src/web/package.json /src/web/package-lock.json /work/node/
-    cd /work/node
-    npm ci >/dev/null
-    npx esbuild runtime_entry.js --bundle --format=esm --platform=browser --minify --outfile=/work/ruby-runtime.js
-    cp node_modules/@ruby/4.0-wasm-wasi/dist/LICENSE /work/licenses/ruby.wasm-LICENSE
-    cp node_modules/@ruby/4.0-wasm-wasi/dist/NOTICE /work/licenses/ruby.wasm-NOTICE
-    cp node_modules/@bjorn3/browser_wasi_shim/LICENSE-APACHE /work/licenses/browser-wasi-LICENSE-APACHE
-    cp node_modules/@bjorn3/browser_wasi_shim/LICENSE-MIT /work/licenses/browser-wasi-LICENSE-MIT
-  '
+fresh() {
+  [ -f "$1/signature" ] && [ "$(cat "$1/signature")" = "$2" ]
+}
+
+if fresh "$WORK/out" "$APP_SIGNATURE" && [ "${WASM_DEBUG:-0}" != 1 ]; then
+  echo "Web runtime inputs are unchanged; reusing build/web-runtime/out"
+else
+  command -v docker >/dev/null || { echo "Docker is required to rebuild the web runtime." >&2; exit 1; }
+  docker info >/dev/null || { echo "Docker is not running." >&2; exit 1; }
+  # Docker writes as root on Linux, so build/web-runtime is only modified inside the containers.
+  mkdir -p "$WORK"
+
+  docker run --rm --platform linux/amd64 \
+    -e BASE_SIGNATURE="$BASE_SIGNATURE" \
+    -e APP_FILES="${APP_FILES[*]}" \
+    -e WASM_DEBUG="${WASM_DEBUG:-0}" \
+    -e RUBY_WASM_JOBS="${RUBY_WASM_JOBS:-2}" \
+    -v "$ROOT:/src" -v "$WORK:/work" -w /work "$RUBY_IMAGE" bash -lc '
+      set -euo pipefail
+      fresh() { [ -f "$1" ] && [ "$(cat "$1")" = "$BASE_SIGNATURE" ]; }
+      cp /src/web/Gemfile /src/web/Gemfile.lock /work/
+      export BUNDLE_GEMFILE=/work/Gemfile
+      bundle config set path /work/bundle >/dev/null
+      bundle install --quiet
+      RUBY_WASM_DIR=$(bundle show ruby_wasm)
+      bundle pristine ruby_wasm >/dev/null
+      patch -d "$RUBY_WASM_DIR" -p1 < /src/web/ruby_wasm-local-headers.patch
+
+      # The full interpreter (with DWARF) is only needed to make base/ or a debug build.
+      if ! fresh /work/base/signature || { [ "$WASM_DEBUG" = 1 ] && ! fresh /work/ruby-base.signature; }; then
+        STRIP=/work/build/toolchain/wasi-sdk-24.0/bin/llvm-strip
+        if ! fresh /work/ruby-base.signature || [ ! -f /work/ruby-base.wasm ] || [ ! -x "$STRIP" ] ||
+          [ ! -f /work/ruby-4.0.7/COPYING ]; then
+          rm -rf /work/build /work/rubies /work/ruby-4.0.7
+          curl -fsSL https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz -o /work/ruby-4.0.7.tar.gz
+          echo "'"$RUBY_TARBALL_SHA256"'  /work/ruby-4.0.7.tar.gz" | sha256sum -c -
+          tar -xzf /work/ruby-4.0.7.tar.gz -C /work
+          patch -d /work/ruby-4.0.7 -p1 < /src/web/cruby-no-fsync.patch
+          bundle exec rbwasm build --ruby-version /work/ruby-4.0.7 \
+            --target wasm32-unknown-wasip1 --build-profile full --stdlib \
+            -o /work/ruby-base.wasm
+          echo "$BASE_SIGNATURE" > /work/ruby-base.signature
+        fi
+        # Stripping DWARF before packing yields the same module as stripping the packed app.
+        rm -rf /work/base
+        mkdir -p /work/base
+        "$STRIP" --strip-debug /work/ruby-base.wasm -o /work/base/ruby-base.wasm
+        cp /work/ruby-4.0.7/COPYING /work/base/CRuby-COPYING
+        echo "$BASE_SIGNATURE" > /work/base/signature
+      fi
+
+      rm -rf /work/app /work/out
+      for file in $APP_FILES; do
+        install -D "/src/$file" "/work/app/$file"
+      done
+      mkdir -p /work/out/licenses
+      bundle exec rbwasm pack /work/base/ruby-base.wasm --dir /work/app::/app -o /work/out/ruby-app.wasm
+      if [ "$WASM_DEBUG" = 1 ]; then
+        bundle exec rbwasm pack /work/ruby-base.wasm --dir /work/app::/app -o /work/ruby-app.debug.wasm
+      fi
+      cp /work/base/CRuby-COPYING /work/out/licenses/CRuby-COPYING
+      # Container-owned release notices must be readable by the packaging user.
+      install -m 0644 /src/public/web/licenses/Ruby-logo-NOTICE /work/out/licenses/Ruby-logo-NOTICE
+    '
+
+  docker run --rm --platform linux/amd64 \
+    -e APP_SIGNATURE="$APP_SIGNATURE" \
+    -v "$ROOT:/src" -v "$WORK:/work" -w /work "$NODE_IMAGE" bash -lc '
+      set -euo pipefail
+      rm -rf /work/node
+      mkdir -p /work/node
+      cp /src/web/runtime_entry.js /src/web/package.json /src/web/package-lock.json /work/node/
+      cd /work/node
+      npm ci >/dev/null
+      npx esbuild runtime_entry.js --bundle --format=esm --platform=browser --minify --outfile=/work/out/ruby-runtime.js
+      cp node_modules/@ruby/4.0-wasm-wasi/dist/LICENSE /work/out/licenses/ruby.wasm-LICENSE
+      cp node_modules/@ruby/4.0-wasm-wasi/dist/NOTICE /work/out/licenses/ruby.wasm-NOTICE
+      cp node_modules/@bjorn3/browser_wasi_shim/LICENSE-APACHE /work/out/licenses/browser-wasi-LICENSE-APACHE
+      cp node_modules/@bjorn3/browser_wasi_shim/LICENSE-MIT /work/out/licenses/browser-wasi-LICENSE-MIT
+      echo "$APP_SIGNATURE" > /work/out/signature
+    '
+fi
 
 hash_file() {
   ruby -rdigest -e 'puts Digest::SHA256.file(ARGV.fetch(0)).hexdigest[0, 16]' "$1"
 }
 
-WASM_NAME="ruby-$(hash_file "$WORK/ruby-app.wasm").wasm"
-JS_NAME="ruby-$(hash_file "$WORK/ruby-runtime.js").js"
+mkdir -p "$PUBLIC"
+WASM_NAME="ruby-$(hash_file "$WORK/out/ruby-app.wasm").wasm"
+JS_NAME="ruby-$(hash_file "$WORK/out/ruby-runtime.js").js"
 find "$PUBLIC" -maxdepth 1 -type f \( -name 'ruby-*.wasm' -o -name 'ruby-*.js' \) -delete
-cp "$WORK/ruby-app.wasm" "$PUBLIC/$WASM_NAME"
-cp "$WORK/ruby-runtime.js" "$PUBLIC/$JS_NAME"
+cp "$WORK/out/ruby-app.wasm" "$PUBLIC/$WASM_NAME"
+cp "$WORK/out/ruby-runtime.js" "$PUBLIC/$JS_NAME"
 rm -rf "$PUBLIC/licenses"
-cp -R "$WORK/licenses" "$PUBLIC/licenses"
+cp -R "$WORK/out/licenses" "$PUBLIC/licenses"
 ruby -rjson -e 'File.write(ARGV.fetch(0), JSON.pretty_generate(javascript: ARGV.fetch(1), webassembly: ARGV.fetch(2)) + "\n")' \
   "$PUBLIC/runtime.json" "$JS_NAME" "$WASM_NAME"
 

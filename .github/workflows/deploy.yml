@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   id-token: write
 
@@ -20,12 +21,16 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  BUNDLE_WITHOUT: desktop
   STACK_NAME: raibert-prod
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # workflow_run's branch filter also matches pull requests from forks whose branch is named main.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event))
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -37,9 +42,44 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.7
-          bundler-cache: true
+
+      # Deploy the exact runtime CI built and tested for this commit.
+      - name: Replace committed runtime with the tested build
+        if: github.event_name == 'workflow_run'
+        run: rm -rf public/web/ruby-*.wasm public/web/ruby-*.js public/web/licenses
+
+      - name: Download tested web runtime
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v8
+        with:
+          name: web-runtime
+          path: public/web
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      # A manual deploy has no CI run to take the runtime from, so it rebuilds with CI's caches.
+      - name: Compute web runtime cache keys
+        id: keys
+        if: github.event_name == 'workflow_dispatch'
+        run: script/build_web --cache-keys >> "$GITHUB_OUTPUT"
+
+      - name: Restore packed web runtime
+        id: app-cache
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/cache/restore@v6
+        with:
+          path: build/web-runtime/out
+          key: web-runtime-app-${{ steps.keys.outputs.app }}
+
+      - name: Restore Ruby WebAssembly interpreter
+        if: github.event_name == 'workflow_dispatch' && steps.app-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: build/web-runtime/base
+          key: web-runtime-base-${{ steps.keys.outputs.base }}
 
       - name: Rebuild Ruby WebAssembly application
+        if: github.event_name == 'workflow_dispatch'
         run: script/build_web
 
       - name: Package static site
