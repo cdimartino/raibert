@@ -73,6 +73,18 @@ tick_collision.define_singleton_method(:step_enemy) do |enemy, _now|
   enemy[:row], enemy[:column] = @player
 end
 coverage_assert(tick_collision.tick(100) == :hit, "enemy movement can collide during a tick")
+coverage_assert(tick_collision.deaths == 1 && tick_collision.last_death_cause == :bug, "a collision records what ended the life")
+
+counted = GameState.new(now: 0)
+counted.instance_variable_set(:@player, [0, 0])
+counted.move(:up_left, 100)
+coverage_assert(counted.deaths == 1 && counted.last_death_cause == :fall, "a fall is recorded as the cause")
+counted.instance_variable_set(:@pickup, { kind: :shield, row: counted.player[0], column: counted.player[1] })
+counted.send(:collect_pickup, 200)
+counted.send(:use_rescue, :left, 300)
+coverage_assert(counted.pickups_collected == { shield: 1 } && counted.rescues_used == 1, "pickups and rescues are counted")
+counted.reset(400)
+coverage_assert(counted.deaths.zero? && counted.pickups_collected.empty? && counted.rescues_used.zero?, "a new run clears its counts")
 
 finished = GameState.new(start_level: GameState::LEVEL_COUNT)
 finished.send(:advance_stage, 1_000)

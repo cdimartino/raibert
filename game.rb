@@ -985,7 +985,9 @@ class RaiBertWindow < Gosu::Window
     return unless @game && Gosu.respond_to?(:publish_game_state)
 
     state = { screen: @screen, status: @game.status, score: @game.score, stage: @game.stage, lives: @game.lives,
-              difficulty: @game.difficulty, paused: @paused, bonuses: @game.score_bonuses }
+              difficulty: @game.difficulty, paused: @paused, bonuses: @game.score_bonuses.dup,
+              character: @character, deaths: @game.deaths, death_cause: @game.last_death_cause,
+              pickups: @game.pickups_collected.dup, rescues_used: @game.rescues_used }
     return if !force && state == @last_published_state
 
     @last_published_state = state

@@ -112,6 +112,8 @@ Rai character artwork is derived from `rai-pets-v2.zip`. Game art prompts are pr
 
 ## Site activity
 
+Performance, errors and gameplay moments also go to Glitchless; see [Glitchless](docs/deployment.md#glitchless) and the site's [privacy page](public/privacy.html).
+
 The private AWS CloudWatch `raibert-prod-usage` dashboard reports visits, browser sessions, gameplay starts and outcomes, active play time, and runtime errors. See [analytics access and deployment](docs/deployment.md#visitor-and-gameplay-analytics) for setup and counting details.
 
 Stage clears award a speed bonus of up to 2,000 × stage, counting down over 1.2 seconds per required tile increment, plus 500 × stage for a clear without losing a life. Pauses stop the game clock. The HUD previews both bonuses; the ending sequence and scoreboard show earned run totals. From stage 3, purple regression enemies marked **UNDO −1** remove tile progress that you must restore.
