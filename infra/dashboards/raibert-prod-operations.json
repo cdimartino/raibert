@@ -9,7 +9,7 @@
       "width": 24,
       "height": 4,
       "properties": {
-        "markdown": "# RaiBert operations\nProduction resources only. Gaps mean no published samples, not proof of health. Error and throttle metrics may be sparse. Storage and certificate metrics update less frequently.\n\n[Analytics](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-usage) | [Operations](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-operations) | [Cost](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-cost)"
+        "markdown": "# RaiBert operations\nProduction resources only. Five-minute charts include partial live data. Select **5 Minutes** in the top-right Refresh menu for regular updates. Gaps mean no published samples, not proof of health. Error and throttle metrics may be sparse. Storage and certificate metrics update less frequently.\n\n[Analytics](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-usage) | [Operations](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-operations) | [Cost](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-cost)"
       }
     },
     {
@@ -34,7 +34,8 @@
             "Global",
             {}
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -73,7 +74,8 @@
           "left": {
             "min": 0
           }
-        }
+        },
+        "liveData": true
       }
     },
     {
@@ -107,7 +109,8 @@
               "label": "Leaderboard"
             }
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -159,7 +162,8 @@
               "label": "Leaderboard Throttles"
             }
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -193,7 +197,8 @@
               "label": "Leaderboard"
             }
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -227,7 +232,8 @@
               "label": "Leaderboard"
             }
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -261,7 +267,8 @@
               "label": "Leaderboard"
             }
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -291,7 +298,8 @@
             "raibert-prod-LeaderboardTable-1NZGDJJSQUM8K",
             {}
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -325,7 +333,8 @@
             "CF",
             {}
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -348,7 +357,8 @@
             "arn:aws:acm:us-east-1:129942367502:certificate/e12990f7-9db1-487f-ad37-4e2790c3510a",
             {}
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -382,7 +392,8 @@
               "label": "Leaderboard"
             }
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -407,7 +418,8 @@
             "StandardStorage",
             {}
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
@@ -463,7 +475,8 @@
             "Rule",
             "raibert-invalid-api"
           ]
-        ]
+        ],
+        "liveData": true
       }
     }
   ]

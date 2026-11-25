@@ -131,6 +131,7 @@ jobs:
         run: |
           npm --prefix web test
           node test/analytics_test.mjs
+          node test/telemetry_test.mjs
 
       - name: Run Chromium end-to-end tests
         run: npm --prefix web run test:e2e

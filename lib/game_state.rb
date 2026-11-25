@@ -26,7 +26,8 @@ class GameState
 
   attr_reader :player, :tiles, :enemies, :pickup, :lives, :score, :stage,
               :level, :target, :status, :rescues, :freeze_until, :shield_until,
-              :difficulty, :board, :score_bonuses, :last_stage_bonus
+              :difficulty, :board, :score_bonuses, :last_stage_bonus,
+              :deaths, :last_death_cause, :pickups_collected, :rescues_used
 
   def initialize(random: Random.new, now: 0, difficulty: :normal, start_level: 1, starting_lives: nil)
     @random = random
@@ -47,6 +48,10 @@ class GameState
     @lives = @starting_lives
     @score = 0
     @score_bonuses = { speed: 0, clean: 0 }
+    @deaths = 0
+    @last_death_cause = nil
+    @pickups_collected = Hash.new(0)
+    @rescues_used = 0
     @stage = @start_level
     setup_stage(now)
   end
@@ -76,7 +81,7 @@ class GameState
       rescue_side = @board.rescue_for(from, direction)
       return use_rescue(rescue_side, now) if rescue_side && @rescues[rescue_side]
 
-      lose_life(now)
+      lose_life(now, :fall)
       return :fall
     end
 
@@ -193,6 +198,7 @@ class GameState
 
   def use_rescue(side, now)
     @rescues[side] = false
+    @rescues_used += 1
     @player = @board.start.dup
     @player_motion = nil
     @score += 250
@@ -201,7 +207,9 @@ class GameState
     :rescue
   end
 
-  def lose_life(now)
+  def lose_life(now, cause = :unknown)
+    @deaths += 1
+    @last_death_cause = cause
     # A final-tile collision is resolved after the tile awards its bonuses.
     @score -= @last_stage_bonus[:clean]
     @score_bonuses[:clean] -= @last_stage_bonus[:clean]
@@ -218,9 +226,10 @@ class GameState
 
   def collide(now, motion: nil)
     return false if invulnerable?(now)
-    return false unless @enemies.any? { |enemy| entity_collides?(enemy, motion, now) }
+    enemy = @enemies.find { |candidate| entity_collides?(candidate, motion, now) }
+    return false unless enemy
 
-    lose_life(now)
+    lose_life(now, enemy[:kind])
     true
   end
 
@@ -229,6 +238,7 @@ class GameState
 
     kind = @pickup[:kind]
     @pickup = nil
+    @pickups_collected[kind] += 1
     @score += 300
     case kind
     when :debugger

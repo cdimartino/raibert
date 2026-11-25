@@ -54,3 +54,4 @@ td:nth-child(3){font-size:20px}
   #leaderboard-status{grid-column:2;grid-row:3;margin:0;align-self:center}
   .leaderboard-card footer{grid-column:1/-1;grid-row:4}
 }
+.privacy-link{justify-self:center;padding:.5rem;color:#a5c8b7;font-size:.8em}

@@ -31,7 +31,7 @@ runtime_files="$(ruby -rjson -rzlib -rdigest -e '
     puts name
   end
 ' "$SITE_DIR")"
-for path in index.html 404.html web/assets.json web/app.js web/app.css web/analytics.js web/input.js web/high-score.js web/artwork.js; do
+for path in index.html 404.html web/assets.json web/app.js web/app.css web/analytics.js web/input.js web/high-score.js web/artwork.js web/telemetry.js web/glitchless-sdk.js privacy.html; do
   test -f "$SITE_DIR/$path" || { echo "Missing site file: $path" >&2; exit 1; }
 done
 

@@ -33,6 +33,10 @@ There is no public administrative API. With an explicitly authenticated administ
 
 The S3 bucket and DynamoDB table use retained deletion policies. Point-in-time recovery protects the leaderboard table. Review retained resources explicitly before deleting a stack.
 
+## Glitchless
+
+`public/web/telemetry.js` also reports performance, errors, stages, deaths, powerups, run results and player bug reports to [Glitchless](https://www.glitchless.gg), in install mode (a random player ID kept in the browser, for retention). It runs on `raibert.lol` only, respects Do Not Track and Global Privacy Control, and players can turn it off in the game menu. `?glitchless=1` turns it on elsewhere to check the wiring (add `&autoplay=1` so the session is marked synthetic), and `?nogd=1` turns it off. Bump `GAME_VERSION` in `telemetry.js` on every release. `public/web/glitchless-sdk.js` is the vendored `glitchless` npm package. `public/privacy.html` describes what is sent; keep it current. Unlike the site's own counts below, Glitchless sends a player ID, scores and error messages.
+
 ## Visitor and gameplay analytics
 
 After deploying the updated stack, open **CloudWatch → Dashboards → raibert-prod-usage** in the hosting AWS account. The `UsageDashboardUrl` stack output provides the direct link. Select a time range to see page views, browser sessions, game starts, game overs, victories, active play seconds, runtime failures, and CDN requests. The bottom table groups page views by referring domain and desktop/mobile input type. CloudWatch can take a few minutes to extract metrics from logs; gameplay reports flush each minute and when leaving or hiding the page.

@@ -2,9 +2,11 @@ import { artworkSource, artworkCrop } from "./artwork.js";
 import { createAnalytics } from "./analytics.js";
 import { classifyGameplaySwipe, menuPrimaryAction } from "./input.js";
 import { HighScoreTracker, difficultyHighScores } from "./high-score.js";
+import { createTelemetry } from "./telemetry.js";
 
 const highScores = new HighScoreTracker();
-const analytics = createAnalytics();
+const telemetry = createTelemetry();
+const analytics = createAnalytics(globalThis, telemetry.mirror);
 let bootPhase = "assets";
 let runtimeVersion = "unknown";
 
@@ -20,7 +22,7 @@ let endingTimer;
 let endingFrame;
 const floatingControls = document.querySelector("#floating-controls");
 const SETTINGS_KEY = "raibert.settings.v1";
-const DEFAULT_SETTINGS = { version: 1, overlay: { enabled: false, portrait: { x: .58, y: .72 }, landscape: { x: .78, y: .62 } }, game: { muted: false, selection: 0, difficulty: "normal", controls: {} }, initials: "" };
+const DEFAULT_SETTINGS = { version: 1, shareData: true, overlay: { enabled: false, portrait: { x: .58, y: .72 }, landscape: { x: .78, y: .62 } }, game: { muted: false, selection: 0, difficulty: "normal", controls: {} }, initials: "" };
 const images = new Map();
 let animation = 0;
 let frameCallback;
@@ -46,6 +48,7 @@ function loadSettings() {
     if (value?.version === 0) value = { version: 1, overlay: { enabled: value.floatingControls === true, ...value.positions }, game: { muted: value.muted, selection: value.selection, difficulty: value.difficulty, controls: value.controls }, initials: value.initials };
     if (!value || value.version !== 1) return cloneDefaults();
     const clean = cloneDefaults();
+    clean.shareData = value.shareData !== false;
     clean.overlay.enabled = value.overlay?.enabled === true;
     for (const mode of ["portrait", "landscape"]) for (const axis of ["x", "y"]) {
       const number = Number(value.overlay?.[mode]?.[axis]);
@@ -286,6 +289,7 @@ const audio = new AudioEngine();
 function dispatchKey(name) {
   if (!keyCallback) return;
   audio.resume();
+  telemetry.input("keyboard");
   keyCallback(name);
 }
 
@@ -362,6 +366,7 @@ globalThis.RaiBertWeb = {
     }
     canvas.dataset.highScore = label;
     canvas.dataset.newHigh = String(Boolean(hud && highScores.newHigh));
+    telemetry.gauge({ draw_commands: commands.length });
     commands.sort((left, right) => left.z - right.z || left.order - right.order);
     context.clearRect(0, 0, canvas.width, canvas.height);
     commands.forEach(draw);
@@ -384,6 +389,7 @@ globalThis.RaiBertWeb = {
     updateControlGuidance();
     loadLeaderboard();
     status.hidden = true;
+    telemetry.ready();
     const tick = () => {
       frameCallback?.();
       animation = requestAnimationFrame(tick);
@@ -399,6 +405,7 @@ globalThis.RaiBertWeb = {
   },
   fail(message) {
     analytics.error(message, bootPhase, runtimeVersion);
+    telemetry.error(message, bootPhase);
     analytics.state({ screen: "error" });
     status.hidden = false;
     status.textContent = `Rai*bert stopped: ${message}`;
@@ -420,6 +427,7 @@ globalThis.RaiBertWeb = {
     gameState = JSON.parse(String(json));
     if (highScores.update(previous, gameState) && !settings.game.muted) audio.finale("record");
     analytics.state(gameState);
+    telemetry.state(gameState);
     if (["game_over", "victory"].includes(previous.status) && gameState.status === "playing") {
       pendingRun = null;
       completedRun = null;
@@ -441,6 +449,7 @@ function acceptsTextInput(target) {
 }
 
 document.addEventListener("keydown", event => {
+  if (event.key === "F8" && !event.repeat) { event.preventDefault(); openBugReport(); return; }
   if (acceptsTextInput(event.target) || document.querySelector("dialog[open]")) return;
   if ((event.key === "l" || event.key === "L") && !event.repeat && !leaderboardDialog.open) {
     event.preventDefault(); openLeaderboard(false); return;
@@ -489,6 +498,7 @@ canvas.addEventListener("pointerup", event => {
   const current = gesture; gesture = null;
   clearTimeout(current.holdTimer);
   if (current.multitouch) return;
+  if (event.pointerType === "touch") telemetry.input("touch");
   const dx = event.clientX - current.x, dy = event.clientY - current.y, elapsed = performance.now() - current.at;
   if (elapsed > 600 || Math.hypot(dx, dy) < 24) {
     if (!current.moved && elapsed < MENU_HOLD_MS && gameState.screen === "select") dispatchAction("confirm");
@@ -516,14 +526,49 @@ function openMenu() {
   if (resumableRun() && !gameState.paused) dispatchAction("pause");
   updateMenuPrimaryAction();
   document.querySelector("#floating-toggle").checked = settings.overlay.enabled;
+  document.querySelector("#share-toggle").checked = settings.shareData;
+  updateReportButton();
   menuDialog.showModal(); updateFloatingControls();
 }
 menuPrimaryButton.addEventListener("click", () => { if (["replay", "play"].includes(menuPrimaryButton.dataset.action)) dispatchAction("confirm"); });
 menuDialog.addEventListener("close", () => { if (resumableRun() && gameState.paused && !keepPausedForDialog) dispatchAction("pause"); keepPausedForDialog = false; updateFloatingControls(); canvas.focus(); });
 document.querySelector("[data-leaderboard]").addEventListener("click", () => { keepPausedForDialog = true; leaderboardPausedGame = gameState.screen === "game" && gameState.paused; menuDialog.close(); openLeaderboard(false); });
 document.querySelector("[data-mute]").addEventListener("click", () => dispatchAction("mute"));
-document.querySelector("[data-reset]").addEventListener("click", () => { settings = cloneDefaults(); persistSettings(); location.reload(); });
+// Resetting game defaults never turns data sharing back on.
+document.querySelector("[data-reset]").addEventListener("click", () => { settings = { ...cloneDefaults(), shareData: settings.shareData }; persistSettings(); location.reload(); });
 document.querySelector("#floating-toggle").addEventListener("change", event => { settings.overlay.enabled = event.target.checked; persistSettings(); updateFloatingControls(); });
+
+function updateReportButton() { document.querySelector("[data-report-bug]").hidden = !telemetry.canReport(); }
+document.querySelector("#share-toggle").addEventListener("change", event => {
+  settings.shareData = event.target.checked; persistSettings(); telemetry.setSharing(settings.shareData); updateReportButton();
+});
+
+// The report form can't be used above a modal dialog, so the menu closes first and the run stays paused.
+let reportPausedGame = false;
+function openBugReport() {
+  if (!telemetry.canReport() || leaderboardDialog.open || endingDialog.open) return;
+  if (menuDialog.open) {
+    reportPausedGame = resumableRun() && gameState.paused;
+    keepPausedForDialog = true;
+    menuDialog.addEventListener("close", () => telemetry.openBugReport(), { once: true });
+    menuDialog.close();
+    return;
+  }
+  telemetry.openBugReport();
+}
+document.querySelector("[data-report-bug]").addEventListener("click", openBugReport);
+telemetry.start({
+  sharing: settings.shareData,
+  screenshot: () => canvas.toDataURL("image/jpeg", .7),
+  onReportOpen() {
+    if (resumableRun() && !gameState.paused) { dispatchAction("pause"); reportPausedGame = true; }
+  },
+  onReportClose() {
+    if (reportPausedGame && resumableRun() && gameState.paused) dispatchAction("pause");
+    reportPausedGame = false;
+    canvas.focus();
+  }
+});
 
 function orientationKey() { return innerHeight > innerWidth ? "portrait" : "landscape"; }
 function updateFloatingControls() {
@@ -534,7 +579,7 @@ function updateFloatingControls() {
   const maxX = Math.max(0, innerWidth - floatingControls.offsetWidth), maxY = Math.max(0, innerHeight - floatingControls.offsetHeight);
   floatingControls.style.left = `${point.x * maxX}px`; floatingControls.style.top = `${point.y * maxY}px`;
 }
-floatingControls.querySelectorAll("[data-action]").forEach(button => button.addEventListener("pointerdown", event => { event.stopPropagation(); dispatchAction(button.dataset.action); }));
+floatingControls.querySelectorAll("[data-action]").forEach(button => button.addEventListener("pointerdown", event => { event.stopPropagation(); telemetry.input("touch"); dispatchAction(button.dataset.action); }));
 floatingControls.querySelector("[data-menu]").addEventListener("click", openMenu);
 let drag = null;
 floatingControls.querySelector(".grip").addEventListener("pointerdown", event => { event.stopPropagation(); drag = { id:event.pointerId, dx:event.clientX-floatingControls.offsetLeft, dy:event.clientY-floatingControls.offsetTop }; event.currentTarget.setPointerCapture(event.pointerId); });
@@ -699,6 +744,7 @@ async function refreshLeaderboard(offerSubmission) {
   updateScoreActions();
 }
 async function openLeaderboard(offerSubmission) {
+  telemetry.track("leaderboard_view", { after_run: Boolean(offerSubmission) });
   if (menuDialog.open) menuDialog.close();
   if (gameState.screen === "game" && gameState.status === "playing" && !gameState.paused) { dispatchAction("pause"); leaderboardPausedGame = true; }
   renderRunResult();
@@ -722,6 +768,7 @@ leaderboardDialog.querySelector("[data-play-again]").addEventListener("click", (
 leaderboardDialog.addEventListener("cancel", event => { if (submittingRun) event.preventDefault(); });
 leaderboardDialog.addEventListener("close", () => { leaderboardRequest++; if (leaderboardPausedGame && resumableRun() && gameState.paused) dispatchAction("pause"); leaderboardPausedGame = false; updateFloatingControls(); canvas.focus(); });
 document.querySelector("[data-skip]").addEventListener("click", () => {
+  telemetry.track("score_skip", { difficulty: pendingRun?.difficulty ?? "unknown" });
   document.querySelector("#initials-form").hidden = true;
   pendingRun = null;
   updateScoreActions();
@@ -747,9 +794,10 @@ document.querySelector("#initials-form").addEventListener("submit", async event 
     const board = await response.json(); if (!response.ok) throw new Error(board.error || `HTTP ${response.status}`);
     settings.initials = initials; persistSettings(); renderLeaderboard(board, board.entry?.id);
     document.querySelector("#initials-form").hidden = true;
+    telemetry.track("score_submit", { accepted: true, ranked: Boolean(board.rank), difficulty: run.difficulty });
     message.textContent = board.rank ? `Accepted at rank ${board.rank}.` : "Score saved. It is below the worldwide Top 15.";
     pendingRun = null;
-  } catch (error) { message.textContent = `Submission failed: ${error.message}. Submit again or choose Skip score.`; }
+  } catch (error) { telemetry.track("score_submit", { accepted: false, difficulty: run.difficulty }); message.textContent = `Submission failed: ${error.message}. Submit again or choose Skip score.`; }
   finally {
     clearTimeout(submissionTimeout);
     submittingRun = false;
@@ -758,6 +806,10 @@ document.querySelector("#initials-form").addEventListener("submit", async event 
     leaderboardDialog.querySelector(pendingRun ? "[data-submit-score]" : "[data-play-again]").focus();
   }
 });
+
+// For coding agents (WebMCP, outside production only): read the run and drive it.
+telemetry.registerTool("raibert_get_state", "Current screen, stage, score, lives and deaths", { type: "object", properties: {} }, () => gameState);
+telemetry.registerTool("raibert_action", "Send one game action, as the touch controls do", { type: "object", properties: { action: { type: "string", enum: ["up_left", "up_right", "down_left", "down_right", "select_left", "select_right", "select_up", "select_down", "confirm", "pause"] } }, required: ["action"] }, ({ action }) => { dispatchAction(String(action)); return gameState; });
 
 async function preloadImages(imageUrls, sources = {}) {
   // Use the shorter viewport edge so rotation keeps the same mobile memory budget.

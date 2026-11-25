@@ -1,11 +1,13 @@
 // Aggregate, first-party analytics. Tracking never blocks gameplay.
-export function createAnalytics(env = globalThis) {
+export function createAnalytics(env = globalThis, mirror = () => {}) {
   const enabled = env.location.hostname === "raibert.lol" &&
     env.navigator.doNotTrack !== "1" && !env.navigator.globalPrivacyControl;
   let referrer = "direct";
   try { referrer = new URL(env.document.referrer).hostname.toLowerCase(); } catch {}
   const device = env.matchMedia("(pointer: coarse)").matches ? "mobile" : "desktop";
   function track(event, extra = {}) {
+    // Glitchless receives the same moments under the same names; it applies its own on/off rules.
+    try { mirror(event, extra); } catch {}
     if (!enabled) return;
     try {
       const body = JSON.stringify({ event, device, referrer, ...extra });

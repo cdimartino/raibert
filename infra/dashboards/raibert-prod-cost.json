@@ -1,5 +1,5 @@
 {
-  "start": "-P14D",
+  "start": "-P1D",
   "periodOverride": "inherit",
   "widgets": [
     {
@@ -7,15 +7,15 @@
       "x": 0,
       "y": 0,
       "width": 24,
-      "height": 4,
+      "height": 5,
       "properties": {
-        "markdown": "# RaiBert cost and usage\nBilling estimates update periodically. Dollar charts show account-wide estimated month-to-date charges, not RaiBert-only cost; blank does not mean $0. Lower charts show RaiBert usage drivers, not dollar estimates. [Billing preferences](https://console.aws.amazon.com/billing/home#/preferences) | [Cost Explorer](https://console.aws.amazon.com/costmanagement/home#/cost-explorer) (requires billing permissions).\n\n[Analytics](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-usage) | [Operations](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-operations) | [Cost](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-cost)"
+        "markdown": "# RaiBert cost and usage\nUsage charts: last 24 hours, 5-minute buckets, including partial live data. In the top-right Refresh menu, select **5 Minutes** for regular updates. Gaps mean no published samples, not confirmed zero.\n\nBilling updates only several times daily; dollar widgets show account-wide estimated month-to-date charges over the last 14 days. S3 storage updates daily (last 7 days shown). These AWS schedules cannot be shortened. Usage charts show cost drivers, not dollar estimates. [Cost Explorer](https://console.aws.amazon.com/costmanagement/home#/cost-explorer)\n\n[Analytics](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-usage) | [Operations](https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=raibert-prod-operations)"
       }
     },
     {
       "type": "metric",
       "x": 0,
-      "y": 4,
+      "y": 5,
       "width": 12,
       "height": 6,
       "properties": {
@@ -33,13 +33,15 @@
             {}
           ]
         ],
-        "setPeriodToTimeRange": false
+        "setPeriodToTimeRange": false,
+        "liveData": true,
+        "start": "-P14D"
       }
     },
     {
       "type": "metric",
       "x": 12,
-      "y": 4,
+      "y": 5,
       "width": 12,
       "height": 6,
       "properties": {
@@ -55,21 +57,23 @@
               "id": "services"
             }
           ]
-        ]
+        ],
+        "liveData": true,
+        "start": "-P14D"
       }
     },
     {
       "type": "metric",
       "x": 0,
-      "y": 10,
+      "y": 11,
       "width": 12,
       "height": 6,
       "properties": {
-        "title": "RaiBert CDN bytes downloaded per day",
+        "title": "RaiBert CDN bytes downloaded / 5 minutes",
         "region": "us-east-1",
         "view": "timeSeries",
         "stat": "Sum",
-        "period": 86400,
+        "period": 300,
         "metrics": [
           [
             "AWS/CloudFront",
@@ -80,21 +84,22 @@
             "Global",
             {}
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
       "type": "metric",
       "x": 12,
-      "y": 10,
+      "y": 11,
       "width": 12,
       "height": 6,
       "properties": {
-        "title": "RaiBert CDN requests per day",
+        "title": "RaiBert CDN requests / 5 minutes",
         "region": "us-east-1",
         "view": "timeSeries",
         "stat": "Sum",
-        "period": 86400,
+        "period": 300,
         "metrics": [
           [
             "AWS/CloudFront",
@@ -105,21 +110,22 @@
             "Global",
             {}
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
       "type": "metric",
       "x": 0,
-      "y": 16,
+      "y": 17,
       "width": 12,
       "height": 6,
       "properties": {
-        "title": "RaiBert backend invocations per day",
+        "title": "RaiBert backend invocations / 5 minutes",
         "region": "us-east-1",
         "view": "timeSeries",
         "stat": "Sum",
-        "period": 86400,
+        "period": 300,
         "metrics": [
           [
             "AWS/Lambda",
@@ -139,21 +145,22 @@
               "label": "Leaderboard"
             }
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
       "type": "metric",
       "x": 12,
-      "y": 16,
+      "y": 17,
       "width": 12,
       "height": 6,
       "properties": {
-        "title": "RaiBert log ingestion bytes per day",
+        "title": "RaiBert log ingestion bytes / 5 minutes",
         "region": "us-east-1",
         "view": "timeSeries",
         "stat": "Sum",
-        "period": 86400,
+        "period": 300,
         "metrics": [
           [
             "AWS/Logs",
@@ -173,21 +180,22 @@
               "label": "Leaderboard"
             }
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
       "type": "metric",
       "x": 0,
-      "y": 22,
+      "y": 23,
       "width": 12,
       "height": 6,
       "properties": {
-        "title": "RaiBert daily database consumed capacity",
+        "title": "RaiBert database consumed capacity / 5 minutes",
         "region": "us-east-1",
         "view": "timeSeries",
         "stat": "Sum",
-        "period": 86400,
+        "period": 300,
         "metrics": [
           [
             "AWS/DynamoDB",
@@ -203,17 +211,18 @@
             "raibert-prod-LeaderboardTable-1NZGDJJSQUM8K",
             {}
           ]
-        ]
+        ],
+        "liveData": true
       }
     },
     {
       "type": "metric",
       "x": 12,
-      "y": 22,
+      "y": 23,
       "width": 12,
       "height": 6,
       "properties": {
-        "title": "RaiBert stored bytes (daily sample)",
+        "title": "RaiBert stored bytes (daily samples; last 7 days)",
         "region": "us-east-1",
         "view": "timeSeries",
         "stat": "Average",
@@ -228,7 +237,9 @@
             "StandardStorage",
             {}
           ]
-        ]
+        ],
+        "liveData": true,
+        "start": "-P7D"
       }
     }
   ]

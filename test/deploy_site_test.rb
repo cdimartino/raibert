@@ -14,7 +14,7 @@ end
 Dir.mktmpdir("raibert-deploy-") do |directory|
   site = File.join(directory, "site")
   FileUtils.mkdir_p([File.join(site, "web"), File.join(directory, "bin")])
-  %w[index.html 404.html web/assets.json web/app.js web/app.css web/input.js web/artwork.js web/analytics.js web/high-score.js].each do |name|
+  %w[index.html 404.html web/assets.json web/app.js web/app.css web/input.js web/artwork.js web/analytics.js web/high-score.js web/telemetry.js web/glitchless-sdk.js privacy.html].each do |name|
     File.write(File.join(site, name), "fixture")
   end
   File.write(File.join(site, "web/assets.json"), JSON.generate(images: ["/web/artwork.js"], effects: [], initialSong: "/web/input.js"))
