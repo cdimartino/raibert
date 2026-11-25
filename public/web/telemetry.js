@@ -3,7 +3,7 @@
 export const GAME_VERSION = "2026-11-25.1";
 const INTAKE = "https://api.glitchless.gg";
 // Public and write-only: it can only send data.
-const CLIENT_TOKEN = "gl_pub_i5oOsRWXYe4KAUykN8KLZKY5";
+const CLIENT_TOKEN = "gl_pub_BDGg2a5w283658NDIWlpn9JY";
 const MAX_QUEUED = 100;
 
 const stageId = stage => `stage-${String(stage).padStart(2, "0")}`;
