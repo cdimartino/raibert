@@ -4,7 +4,19 @@ The usage dashboard is also maintained in infra/site.yml and managed by the prod
 
 These definitions target the production resources discovered in account 129942367502 on October 8, 2026. They are standalone CloudWatch dashboards, separate from the existing CloudFormation-managed usage dashboard. Update physical resource IDs if resources are replaced.
 
-## Current status
+## Data freshness
+
+The cost dashboard defaults to the last 24 hours. Traffic, transfer, Lambda, logs, and database charts use five-minute buckets with live partial data enabled, as do operations charts. Billing widgets retain a 14-day window and storage a seven-day window because their source metrics arrive less often.
+
+Collection and screen refresh are separate. Analytics events are sent immediately and active play time is flushed every 60 seconds. AWS service metrics can take a few minutes to arrive; charts do not need a new collector or higher-resolution custom metrics. Billing estimates are published several times daily and S3 storage once daily, with possible delivery delay. Sparse event metrics (such as runtime failures and victories) only report when an event occurs. Gaps must not be filled with invented zeroes or stale values.
+
+In the CloudWatch console, choose **Refresh options → 5 Minutes** for regular updates. Auto-refresh is a console control, not a supported DashboardBody property. On analytics, each refresh also reruns the Logs Insights tables and incurs query charges. Keep a relative time range ending now; an absolute historical range will not advance with refresh.
+
+References: [AWS live data](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/cloudwatch-live-data.html), [refresh controls](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/change_dashboard_refresh_interval.html), [daily S3 metrics](https://docs.aws.amazon.com/AmazonS3/latest/userguide/cloudwatch-monitoring.html).
+
+## Previous publication status
+
+October 9, 2026: published the five-minute cost usage charts and live-data settings for cost and operations using the `raibert-admin` IAM user. Both dashboard writes returned empty validation messages.
 
 Published on October 8, 2026 as raibert-prod-operations and raibert-prod-cost. Both PutDashboard calls returned empty DashboardValidationMessages; GetDashboard readbacks exactly matched these files. Billing total and service search queries returned data (latest account-wide estimate: USD 2.01). Cost Explorer access works. Both named leaderboard alarms returned OK. DescribeAlarms must specify the two alarm names; listing by prefix requires broader access than this policy grants.
 
