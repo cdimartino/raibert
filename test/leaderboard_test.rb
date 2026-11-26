@@ -11,6 +11,8 @@ end
 base = { "runId" => "123e4567-e89b-42d3-a456-426614174000", "initials" => "RAI", "score" => 12_300, "stage" => 3, "difficulty" => "normal", "outcome" => "game_over" }
 assert(Leaderboard.validate_submission(base) == base, "valid submission is normalized")
 assert(Leaderboard.validate_submission(base.merge("initials" => "rai"))["initials"] == "RAI", "lowercase initials are upcased")
+assert(Leaderboard.validate_submission(base.merge("runId" => base["runId"].upcase))["runId"] == base["runId"], "uppercase run ids are accepted and downcased")
+["123e4567-e89b-42d3-c456-426614174000", "123e4567-e89b-42d3-a456-42661417400ｆ", "123e4567-e89b-42d3-a456-4266141740000"].each { |run_id| assert(rejects(base.merge("runId" => run_id)), "invalid run id #{run_id.inspect} is rejected") }
 # Unicode case mapping expands these to three ASCII letters ("SSA", "FFA"); they must be rejected before upcasing.
 ["ßa", "ﬀa", "RAİ", 123].each { |initials| assert(rejects(base.merge("initials" => initials)), "non-letter initials #{initials.inspect} are rejected") }
 [base.merge("extra" => true), base.reject { |key| key == "score" }, base.merge("runId" => "bad"), base.merge("initials" => "AA"), base.merge("initials" => "KKK"), base.merge("score" => -1), base.merge("score" => 100_000_000), base.merge("stage" => 0), base.merge("difficulty" => "nightmare"), base.merge("outcome" => "quit")].each { |value| assert(rejects(value), "invalid submission is rejected") }

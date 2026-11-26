@@ -20,7 +20,8 @@ class Leaderboard
     run_id = value.call("runId").to_s
     score, stage = value.call("score"), value.call("stage")
     difficulty, outcome = value.call("difficulty").to_s, value.call("outcome").to_s
-    raise ValidationError, "invalid run id" unless run_id.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i)
+    # Explicit hex classes instead of /i: case-insensitive matching was also covered by those advisories.
+    raise ValidationError, "invalid run id" unless run_id.match?(/\A\h{8}-\h{4}-4\h{3}-[89abAB]\h{3}-\h{12}\z/)
     raise ValidationError, "invalid initials" if DENIED_INITIALS.include?(initials)
     raise ValidationError, "invalid score" unless score.is_a?(Integer) && score.between?(0, MAX_SCORE)
     raise ValidationError, "invalid stage" unless stage.is_a?(Integer) && stage.between?(1, 20)
