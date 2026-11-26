@@ -43,7 +43,7 @@ jobs:
       - name: Install gems on the disposable runner
         if: runner.environment == 'self-hosted'
         run: |
-          ruby -e 'abort "unexpected Ruby version" unless RUBY_VERSION == "4.0.7"'
+          ruby -e 'abort "unexpected Ruby version" unless RUBY_VERSION == "4.0.10"'
           test "$(node -v)" = v22.20.0
           bundle config set --local path vendor/bundle
           bundle install
@@ -52,7 +52,7 @@ jobs:
         if: runner.environment == 'github-hosted'
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 4.0.7
+          ruby-version: 4.0.10
           bundler-cache: true
 
       - name: Set up Node.js
@@ -87,7 +87,7 @@ jobs:
         if: runner.environment == 'github-hosted'
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 4.0.7
+          ruby-version: 4.0.10
 
       - name: Compute web runtime cache keys
         id: keys
@@ -142,7 +142,7 @@ jobs:
       - name: Install gems on the disposable runner
         if: runner.environment == 'self-hosted'
         run: |
-          ruby -e 'abort "unexpected Ruby version" unless RUBY_VERSION == "4.0.7"'
+          ruby -e 'abort "unexpected Ruby version" unless RUBY_VERSION == "4.0.10"'
           bundle config set --local path vendor/bundle
           bundle install
 
@@ -150,7 +150,7 @@ jobs:
         if: runner.environment == 'github-hosted'
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 4.0.7
+          ruby-version: 4.0.10
           bundler-cache: true
 
       - name: Check image browser toolchain

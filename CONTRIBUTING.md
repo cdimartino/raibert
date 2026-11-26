@@ -4,7 +4,7 @@ Thanks for helping ship the pipeline. Open an issue before a large behavior or i
 
 ## Development
 
-Use Ruby 4.0.7 through mise, install the locked gems, then run `script/test`. Browser changes also require `npm ci --prefix web` and Playwright Chromium. Run one group with `script/test unit` (seconds), `script/test simulation` (full campaigns, about two minutes) or `script/test e2e` (Playwright; later arguments such as `--project=chromium` go to Playwright). Keep gameplay rules deterministic in `lib/game_state.rb`; rendering and input belong in `game.rb` or the narrow browser bridge.
+Use Ruby 4.0.10 through mise, install the locked gems, then run `script/test`. Browser changes also require `npm ci --prefix web` and Playwright Chromium. Run one group with `script/test unit` (seconds), `script/test simulation` (full campaigns, about two minutes) or `script/test e2e` (Playwright; later arguments such as `--project=chromium` go to Playwright). Keep gameplay rules deterministic in `lib/game_state.rb`; rendering and input belong in `game.rb` or the narrow browser bridge.
 
 Rebuild the committed Wasm runtime with `script/build_web` after changing Ruby game code, `lib/`, `config/controls.json`, or `web/`. HTML, CSS, and JavaScript-only changes do not require that build.
 

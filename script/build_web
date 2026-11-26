@@ -12,10 +12,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$ROOT/build/web-runtime"
 PUBLIC="$ROOT/public/web"
 # Docker's public mirror avoids anonymous Docker Hub pull limits on CI runners.
-RUBY_IMAGE="public.ecr.aws/docker/library/ruby@sha256:c88f8a06d935a379623b476680a7aeaf03c85e3f52949a919287dbff62cce3b1"
+# ruby:4.0.10-bookworm, linux/amd64 manifest.
+RUBY_IMAGE="public.ecr.aws/docker/library/ruby@sha256:344abff2f8e84d07e1e308469f883f9b453a6e69617a1aad36faaa7f3c6349c7"
 NODE_IMAGE="public.ecr.aws/docker/library/node@sha256:de2d8c00f6b1938eefdf575b5c1efa314a48dd8842a5983ec275cb11e8e6685c"
-RUBY_TARBALL_SHA256="911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
-BASE_CACHE_KEY="cruby-4.0.7-wasi-sdk-24-ruby-wasm-2.10.1-$RUBY_TARBALL_SHA256"
+RUBY_VERSION="4.0.10"
+RUBY_TARBALL_SHA256="b53eef3371fa5d3e3b74340edcd015f06d5d8853968d4e539a5264fce41ed9f1"
+BASE_CACHE_KEY="cruby-$RUBY_VERSION-wasi-sdk-24-ruby-wasm-2.10.1-$RUBY_TARBALL_SHA256"
 BASE_INPUTS=(web/Gemfile.lock web/ruby_wasm-local-headers.patch web/cruby-no-fsync.patch)
 # Files packed into the Ruby app at /app. They are also the app signature, so add new game files here.
 APP_FILES=(game.rb lib/board_layouts.rb lib/game_state.rb lib/demo_window.rb config/controls.json web/gosu.rb web/boot.rb)
@@ -57,6 +59,7 @@ else
 
   docker run --rm --platform linux/amd64 \
     -e BASE_SIGNATURE="$BASE_SIGNATURE" \
+    -e RUBY_SOURCE="ruby-$RUBY_VERSION" \
     -e APP_FILES="${APP_FILES[*]}" \
     -e WASM_DEBUG="${WASM_DEBUG:-0}" \
     -e RUBY_WASM_JOBS="${RUBY_WASM_JOBS:-2}" \
@@ -75,13 +78,13 @@ else
       if ! fresh /work/base/signature || { [ "$WASM_DEBUG" = 1 ] && ! fresh /work/ruby-base.signature; }; then
         STRIP=/work/build/toolchain/wasi-sdk-24.0/bin/llvm-strip
         if ! fresh /work/ruby-base.signature || [ ! -f /work/ruby-base.wasm ] || [ ! -x "$STRIP" ] ||
-          [ ! -f /work/ruby-4.0.7/COPYING ]; then
-          rm -rf /work/build /work/rubies /work/ruby-4.0.7
-          curl -fsSL https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz -o /work/ruby-4.0.7.tar.gz
-          echo "'"$RUBY_TARBALL_SHA256"'  /work/ruby-4.0.7.tar.gz" | sha256sum -c -
-          tar -xzf /work/ruby-4.0.7.tar.gz -C /work
-          patch -d /work/ruby-4.0.7 -p1 < /src/web/cruby-no-fsync.patch
-          bundle exec rbwasm build --ruby-version /work/ruby-4.0.7 \
+          [ ! -f /work/$RUBY_SOURCE/COPYING ]; then
+          rm -rf /work/build /work/rubies /work/$RUBY_SOURCE
+          curl -fsSL "https://cache.ruby-lang.org/pub/ruby/4.0/$RUBY_SOURCE.tar.gz" -o /work/$RUBY_SOURCE.tar.gz
+          echo "'"$RUBY_TARBALL_SHA256"'  /work/$RUBY_SOURCE.tar.gz" | sha256sum -c -
+          tar -xzf /work/$RUBY_SOURCE.tar.gz -C /work
+          patch -d /work/$RUBY_SOURCE -p1 < /src/web/cruby-no-fsync.patch
+          bundle exec rbwasm build --ruby-version /work/$RUBY_SOURCE \
             --target wasm32-unknown-wasip1 --build-profile full --stdlib \
             -o /work/ruby-base.wasm
           echo "$BASE_SIGNATURE" > /work/ruby-base.signature
@@ -90,7 +93,7 @@ else
         rm -rf /work/base
         mkdir -p /work/base
         "$STRIP" --strip-debug /work/ruby-base.wasm -o /work/base/ruby-base.wasm
-        cp /work/ruby-4.0.7/COPYING /work/base/CRuby-COPYING
+        cp /work/$RUBY_SOURCE/COPYING /work/base/CRuby-COPYING
         echo "$BASE_SIGNATURE" > /work/base/signature
       fi
 

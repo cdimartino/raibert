@@ -41,7 +41,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 4.0.7
+          ruby-version: 4.0.10
 
       # Deploy the exact runtime CI built and tested for this commit.
       - name: Replace committed runtime with the tested build

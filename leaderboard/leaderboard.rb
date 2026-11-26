@@ -12,12 +12,16 @@ class Leaderboard
     expected = %w[runId initials score stage difficulty outcome]
     raise ValidationError, "invalid fields" unless input.is_a?(Hash) && input.keys.map(&:to_s).sort == expected.sort
     value = ->(key) { input.key?(key) ? input[key] : input[key.to_sym] }
-    initials = value.call("initials").to_s.upcase
+    raw_initials = value.call("initials").to_s
+    # Only three ASCII letters reach String#upcase: Ruby's case conversion had memory-safety bugs
+    # (advisories of 2026-11-18), and Unicode case mapping can turn two characters into three letters.
+    raise ValidationError, "invalid initials" unless raw_initials.match?(/\A[A-Za-z]{3}\z/)
+    initials = raw_initials.upcase
     run_id = value.call("runId").to_s
     score, stage = value.call("score"), value.call("stage")
     difficulty, outcome = value.call("difficulty").to_s, value.call("outcome").to_s
     raise ValidationError, "invalid run id" unless run_id.match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i)
-    raise ValidationError, "invalid initials" unless initials.match?(/\A[A-Z]{3}\z/) && !DENIED_INITIALS.include?(initials)
+    raise ValidationError, "invalid initials" if DENIED_INITIALS.include?(initials)
     raise ValidationError, "invalid score" unless score.is_a?(Integer) && score.between?(0, MAX_SCORE)
     raise ValidationError, "invalid stage" unless stage.is_a?(Integer) && stage.between?(1, 20)
     raise ValidationError, "invalid difficulty" unless DIFFICULTIES.include?(difficulty)
