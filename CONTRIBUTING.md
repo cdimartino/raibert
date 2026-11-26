@@ -19,6 +19,8 @@ By contributing, you agree that your work is licensed under the project’s MIT 
 
 ### Where CI runs
 
-The repository variable `RAIBERT_CI_POOL` controls both automatic CI jobs (`push` to `main` and pull requests). With the variable unset, jobs run on GitHub-hosted Ubuntu. Set it to `magneto` only after unattended runner registration and remote administration have been verified. Each job then requests its own disposable Linux x64 guest. Runner selection does not fall back automatically when a host is offline.
+Only the repository owner is authorized to start or re-run CI. Owner-authored pull requests from branches in this repository run on GitHub-hosted Ubuntu. Keep **Require approval for all external contributors** enabled: fork pull requests can propose different workflow YAML, so job conditions in this repository do not enforce that boundary. Do not approve external runs or add writers without a change to the authorization policy.
 
-To roll back, delete `RAIBERT_CI_POOL` or set it to `hosted`, then trigger a **new workflow run**. Changing the variable does not move a job that is already queued. For manual diagnostics, dispatch `CI` on a non-main branch with `magneto` checked; leaving it unchecked always selects hosted Ubuntu. A manual dispatch on `main` always uses hosted Ubuntu and can trigger production deployment, so use a non-main ref for diagnostics.
+For owner pushes to `main`, `RAIBERT_CI_POOL=magneto` selects disposable Linux x64 guests for both jobs. If guests are offline there is no automatic fallback. Delete the variable or set it to `hosted` for subsequent runs; queued jobs do not move. Manual `CI` runs are hosted unless the owner explicitly checks `magneto` on a non-main ref.
+
+Production deploys on hosted Ubuntu after successful owner push CI for the default-branch SHA at the time of the completion event. Neither pull requests nor manual **CI** runs deploy. The owner may explicitly dispatch **Deploy raibert.lol** on `main` to deploy the SHA selected by that dispatch.
