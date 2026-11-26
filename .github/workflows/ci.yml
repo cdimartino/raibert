@@ -19,12 +19,13 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Hosted jobs pin ubuntu-24.04: Playwright 1.55.1 cannot install browser dependencies on ubuntu-latest (26.04).
 # Every job runs the same groups as `script/test`. The web runtime is built once, uploaded as the
 # `web-runtime` artifact, tested by the sharded browser jobs and deployed unchanged from main.
 jobs:
   ruby:
     name: Unit, integration & campaign simulation
-    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 20
     steps:
       - name: Check out repository
@@ -77,7 +78,7 @@ jobs:
 
   web-runtime:
     name: Build web runtime
-    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 60
     steps:
       - name: Check out repository
@@ -127,7 +128,7 @@ jobs:
   browser:
     name: Browser end-to-end (${{ matrix.shard }}/2)
     needs: web-runtime
-    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-latest"]') }}
+    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
