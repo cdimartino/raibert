@@ -19,11 +19,14 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Hosted jobs pin ubuntu-24.04: Playwright 1.55.1 cannot install browser dependencies on ubuntu-latest (26.04).
+# Every job runs the same groups as `script/test`. The web runtime is built once, uploaded as the
+# `web-runtime` artifact, tested by the sharded browser jobs and deployed unchanged from main.
 jobs:
   ruby:
-    name: Ruby unit & integration
-    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-latest"]') }}
-    timeout-minutes: 60
+    name: Unit, integration & campaign simulation
+    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-24.04"]') }}
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -31,45 +34,36 @@ jobs:
       - name: Install Gosu system dependencies
         if: runner.environment == 'github-hosted'
         run: |
+          # Rebuilding the man-page index after apt installs costs minutes on hosted Ubuntu.
+          sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get update
-          sudo apt-get install --yes \
+          sudo apt-get install --yes --no-install-recommends \
             libfontconfig1-dev libgl1-mesa-dev libmpg123-dev libopenal-dev \
             libsdl2-dev libsdl2-ttf-dev libsndfile1-dev
 
-      - name: Install gems on the disposable runner
-        if: runner.environment == 'self-hosted'
-        run: |
-          ruby -e 'abort "unexpected Ruby version" unless RUBY_VERSION == "4.0.7"'
-          bundle config set --local path vendor/bundle
-          bundle install
-
+      # Magneto images bake 4.0.10 into the tool cache beside their 4.0.7 default; select it explicitly.
       - name: Set up Ruby
-        if: runner.environment == 'github-hosted'
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 4.0.7
+          ruby-version: 4.0.10
+          self-hosted: ${{ runner.environment == 'self-hosted' }}
           bundler-cache: true
 
-      - name: Enforce 100% GameState unit coverage
-        run: bundle exec ruby test/unit_coverage_test.rb
+      - name: Check image Node.js
+        if: runner.environment == 'self-hosted'
+        run: test "$(node -v)" = v22.20.0
 
-      - name: Test leaderboard ranking and validation domain
-        run: ruby test/leaderboard_test.rb
+      - name: Set up Node.js
+        if: runner.environment == 'github-hosted'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.20.0
 
-      - name: Test analytics collector and WAF request boundaries
-        run: |
-          ruby test/analytics_test.rb
-          ruby test/waf_test.rb
-
-      - name: Run browser shim and HTTP integration tests
-        run: |
-          ruby test/web_shim_test.rb
-          bundle exec ruby test/rack_test.rb
-          bundle exec ruby test/site_test.rb
-          ruby test/deploy_site_test.rb
+      - name: Run unit and integration tests with 100% coverage gates
+        run: script/test unit
 
       - name: Run deterministic full-campaign simulation
-        run: bundle exec ruby test/gameplay_collision_test.rb
+        run: script/test simulation
 
       - name: Upload unit coverage report
         if: always()
@@ -79,28 +73,76 @@ jobs:
           path: coverage/unit.json
           if-no-files-found: error
 
-  browser:
-    name: Browser end-to-end
-    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-latest"]') }}
+  web-runtime:
+    name: Build web runtime
+    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 4.0.10
+          self-hosted: ${{ runner.environment == 'self-hosted' }}
+
+      - name: Compute web runtime cache keys
+        id: keys
+        run: script/build_web --cache-keys >> "$GITHUB_OUTPUT"
+
+      # Unchanged game inputs reuse the packed runtime and skip Docker entirely.
+      - name: Restore packed web runtime
+        id: app-cache
+        uses: actions/cache@v6
+        with:
+          path: build/web-runtime/out
+          key: web-runtime-app-${{ steps.keys.outputs.app }}
+
+      # Otherwise the stripped CRuby interpreter avoids a ten-minute compile.
+      - name: Restore Ruby WebAssembly interpreter
+        if: steps.app-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v6
+        with:
+          path: build/web-runtime/base
+          key: web-runtime-base-${{ steps.keys.outputs.base }}
+
+      - name: Build Ruby WebAssembly application
+        run: script/build_web
+
+      - name: Upload web runtime
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-runtime
+          path: |
+            public/web/ruby-*.wasm
+            public/web/ruby-*.js
+            public/web/runtime.json
+            public/web/licenses/
+          if-no-files-found: error
+          retention-days: 30
+
+  browser:
+    name: Browser end-to-end (${{ matrix.shard }}/2)
+    needs: web-runtime
+    runs-on: ${{ fromJSON(((github.event_name != 'workflow_dispatch' && vars.RAIBERT_CI_POOL == 'magneto') || (github.event_name == 'workflow_dispatch' && inputs.magneto && github.ref != 'refs/heads/main')) && '["self-hosted","Linux","X64","homelab-linux-x64"]' || '["ubuntu-24.04"]') }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       BUNDLE_WITHOUT: desktop
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install gems on the disposable runner
-        if: runner.environment == 'self-hosted'
-        run: |
-          ruby -e 'abort "unexpected Ruby version" unless RUBY_VERSION == "4.0.7"'
-          bundle config set --local path vendor/bundle
-          bundle install
-
+      # Magneto images bake 4.0.10 into the tool cache beside their 4.0.7 default; select it explicitly.
       - name: Set up Ruby
-        if: runner.environment == 'github-hosted'
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 4.0.7
+          ruby-version: 4.0.10
+          self-hosted: ${{ runner.environment == 'self-hosted' }}
           bundler-cache: true
 
       - name: Check image browser toolchain
@@ -122,25 +164,27 @@ jobs:
 
       - name: Install Chromium on hosted runner
         if: runner.environment == 'github-hosted'
-        run: npx --prefix web playwright install --with-deps chromium
-
-      - name: Rebuild Ruby WebAssembly application
-        run: script/build_web
-
-      - name: Run Web Audio unit tests
         run: |
-          npm --prefix web test
-          node test/analytics_test.mjs
-          node test/telemetry_test.mjs
+          sudo rm -f /var/lib/man-db/auto-update
+          npx --prefix web playwright install --with-deps --only-shell chromium
+
+      - name: Replace committed runtime with this build
+        run: rm -rf public/web/ruby-*.wasm public/web/ruby-*.js public/web/licenses
+
+      - name: Download web runtime
+        uses: actions/download-artifact@v8
+        with:
+          name: web-runtime
+          path: public/web
 
       - name: Run Chromium end-to-end tests
-        run: npm --prefix web run test:e2e
+        run: script/test e2e --shard=${{ matrix.shard }}/2
 
       - name: Upload Playwright diagnostics
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             web/playwright-report
             web/test-results

@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-ruby "4.0.7"
+ruby "4.0.10"
 gem "puma", "~> 7.2.1"
 gem "rack", "~> 3.2.6"
 

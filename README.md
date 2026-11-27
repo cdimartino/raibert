@@ -70,7 +70,7 @@ Every completed browser run can compete on one worldwide Top 15. The board ranks
 
 ## Run locally
 
-Ruby 4.0.7 is pinned with mise. Native play additionally needs SDL2 and Gosu.
+Ruby 4.0.10 is pinned with mise. Native play additionally needs SDL2 and Gosu.
 
 ```sh
 brew install mise sdl2

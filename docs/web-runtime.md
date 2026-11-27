@@ -8,13 +8,18 @@ The committed content-hashed Wasm and loader files make production static. Rebui
 script/build_web
 ```
 
-Docker must support `linux/amd64`. The ignored `build/web-runtime` cache avoids recompiling the Ruby base when its inputs are unchanged. Set `RUBY_WASM_JOBS=1` on a memory-constrained native amd64 builder. Browser-only HTML, CSS, and JavaScript changes are served directly.
+Docker must support `linux/amd64`. The ignored `build/web-runtime` cache has two layers, each keyed by a signature of its inputs (`script/build_web --cache-keys` prints both):
+
+- `base/` holds the stripped CRuby interpreter. It is recompiled only when the Ruby, WASI SDK or ruby.wasm pins in `script/build_web` or `web/Gemfile.lock` and the patches change.
+- `out/` holds the packed game, the JavaScript loader and licenses. When none of the files listed in `APP_FILES` and `APP_INPUTS` changed, the script copies `out/` into `public/web` without starting Docker. Add any new file the browser game loads to `APP_FILES`.
+
+CI restores both layers from the GitHub Actions cache, builds the runtime once per run, tests that exact build in Playwright, and deploys it unchanged from `main`. Set `RUBY_WASM_JOBS=1` on a memory-constrained native amd64 builder. Browser-only HTML, CSS, and JavaScript changes are served directly.
 
 The first visit downloads the runtime, artwork, and initial audio. WebAssembly, ES modules, Canvas 2D, Web Audio, Pointer Events, and `visualViewport` are used where available. Audio unlocks on the first user gesture.
 
 ## Runtime and artwork size
 
-The release build strips DWARF debug sections with the pinned WASI SDK's `llvm-strip --strip-debug` after packaging the Ruby app and before computing its filename. `build/web-runtime/ruby-app.debug.wasm` retains the unstripped build for local diagnostics. Function names remain in the shipped module. Game source, interpreter behavior, and the bundled standard library are unchanged.
+The release build strips DWARF debug sections from the interpreter with the pinned WASI SDK's `llvm-strip --strip-debug` before packaging the Ruby app; the result is byte-for-byte the module that stripping the packaged app would produce. Run `WASM_DEBUG=1 script/build_web` to also write the unstripped `build/web-runtime/ruby-app.debug.wasm` for local diagnostics. Function names remain in the shipped module. Game source, interpreter behavior, and the bundled standard library are unchanged.
 
 Browser artwork is generated separately, using cwebp 1.6.0:
 
