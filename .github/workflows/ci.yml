@@ -41,20 +41,17 @@ jobs:
             libfontconfig1-dev libgl1-mesa-dev libmpg123-dev libopenal-dev \
             libsdl2-dev libsdl2-ttf-dev libsndfile1-dev
 
-      - name: Install gems on the disposable runner
-        if: runner.environment == 'self-hosted'
-        run: |
-          ruby -e 'abort "unexpected Ruby version" unless RUBY_VERSION == "4.0.10"'
-          test "$(node -v)" = v22.20.0
-          bundle config set --local path vendor/bundle
-          bundle install
-
+      # Magneto images bake 4.0.10 into the tool cache beside their 4.0.7 default; select it explicitly.
       - name: Set up Ruby
-        if: runner.environment == 'github-hosted'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.10
+          self-hosted: ${{ runner.environment == 'self-hosted' }}
           bundler-cache: true
+
+      - name: Check image Node.js
+        if: runner.environment == 'self-hosted'
+        run: test "$(node -v)" = v22.20.0
 
       - name: Set up Node.js
         if: runner.environment == 'github-hosted'
@@ -85,10 +82,10 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Ruby
-        if: runner.environment == 'github-hosted'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.10
+          self-hosted: ${{ runner.environment == 'self-hosted' }}
 
       - name: Compute web runtime cache keys
         id: keys
@@ -140,18 +137,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Install gems on the disposable runner
-        if: runner.environment == 'self-hosted'
-        run: |
-          ruby -e 'abort "unexpected Ruby version" unless RUBY_VERSION == "4.0.10"'
-          bundle config set --local path vendor/bundle
-          bundle install
-
+      # Magneto images bake 4.0.10 into the tool cache beside their 4.0.7 default; select it explicitly.
       - name: Set up Ruby
-        if: runner.environment == 'github-hosted'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 4.0.10
+          self-hosted: ${{ runner.environment == 'self-hosted' }}
           bundler-cache: true
 
       - name: Check image browser toolchain
